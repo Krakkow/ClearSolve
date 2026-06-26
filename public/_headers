@@ -1,0 +1,67 @@
+# ============================================================================
+# STARTER / TEMPLATE — Static-host response headers
+# ClearSolve (Personal Browser-Native NLHE GTO Solver)
+# ----------------------------------------------------------------------------
+# Owner: DevOps Engineer Agent
+# Cross-refs: ARCHITECTURE.md Sec 4.6 / Sec 10, TECH_DECISIONS ADR-003 / ADR-008,
+#             RISK-006 (COOP/COEP/threads), NFR-010, ASM-005, DEP-003.
+#
+# This file is read NATIVELY by BOTH Cloudflare Pages AND Netlify when placed at
+# the published site root. (Vite copies everything in `public/` to the build
+# output root, so `public/_headers` -> `dist/_headers` -> served at `/_headers`.)
+#
+# WHY THIS FILE EXISTS (the load-bearing part):
+#   Multi-threaded WASM (SharedArrayBuffer + wasm threads) requires the page to be
+#   "cross-origin isolated". A page is cross-origin isolated ONLY when the server
+#   sends BOTH of these response headers. Without them, `crossOriginIsolated` is
+#   false at runtime and the app silently falls back to the single-threaded engine
+#   (ADR-003 — correctness is identical either way, only speed differs).
+#
+#   GitHub Pages CANNOT set these headers -> single-thread only. That is the
+#   primary reason ADR-008 selects Cloudflare Pages / Netlify. See DEVOPS.md.
+#
+# IMPORTANT INTERACTION (COEP: require-corp):
+#   With `require-corp`, EVERY cross-origin subresource the page loads must either
+#   send `Cross-Origin-Resource-Policy: cross-origin` (or `same-site`) OR be loaded
+#   with `crossorigin` + supply CORP. Because ClearSolve is no-backend and fetches
+#   only its OWN same-origin static assets (app bundle, WASM, library index/shards),
+#   this is satisfied by default. Do NOT add third-party script/style/image origins
+#   without giving them CORP, or they will be blocked (RISK-006). If a future need
+#   for an embeddable third party arises, consider COEP: credentialless instead.
+# ============================================================================
+
+/*
+  # --- Cross-origin isolation: REQUIRED for multi-threaded WASM (ADR-003) ---
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  # Belt-and-braces so our own assets are embeddable under require-corp:
+  Cross-Origin-Resource-Policy: same-origin
+
+  # --- Baseline security headers (cheap, no backend to protect) ---
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  # CSP: no-backend egress lockdown. `connect-src 'self'` forbids data exfiltration
+  # (NFR-006, ARCHITECTURE Sec 12). `wasm-unsafe-eval` is required by the WASM
+  # instantiation path. Tighten/confirm against the real bundle during implementation.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+
+# ----------------------------------------------------------------------------
+# Long-cache the immutable, content-hashed build assets (Vite emits hashed names).
+# The library SHARDS are large + content-addressed -> safe to cache aggressively.
+# The HTML and the library INDEX must NOT be long-cached (they change per release
+# and the index gates integrity/version checks — NFR-011).
+# ----------------------------------------------------------------------------
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/library/shards/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/library/index.json
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache

@@ -1,0 +1,150 @@
+# =============================================================================
+# STARTER / TEMPLATE — Offline predefined-solution generation pipeline
+# ClearSolve (Personal Browser-Native NLHE GTO Solver)
+# -----------------------------------------------------------------------------
+# Owner: DevOps Engineer Agent
+# Cross-refs:
+#   - TECH_DECISIONS ADR-009 (offline generation via the SAME Rust core, native),
+#     ADR-007 (two-tier index + compressed binary shards), ADR-002 (CFR+).
+#   - ARCHITECTURE Sec 13 / Sec 18 (coverage), Sec 8 (exploitability at gen time).
+#   - DATA_MODEL Sec 7 (PredefinedIndex / GenerationMeta / shard format).
+#   - RISK-001 (this pipeline is THE primary mitigation — heavy spots are
+#     precomputed here, never live-solved), RISK-014 (validated, provenance-stamped).
+#
+# IMPORTANT — HONEST CI TIME REALITY (read DEVOPS.md "Offline generation"):
+#   Production-class postflop solves can run for MINUTES-to-HOURS each. The full
+#   library (Tranche 2/3: all depths + canonical-flop set) WILL EXCEED normal
+#   GitHub-hosted runner time/cost limits. This workflow is therefore designed as:
+#     * MANUAL (workflow_dispatch) — not on every push.
+#     * SCOPED — generate ONE tranche / subset per run via inputs.
+#     * The OUTPUT (shards + index) is an ARTIFACT that a human reviews and then
+#       COMMITS to the repo (versioned bundled assets), so the app build (ci.yml)
+#       just consumes already-generated, validated files.
+#   For the heaviest full-library runs the RECOMMENDED path is to run the SAME
+#   generator LOCALLY on a desktop (no CI time cap) and commit the result. This
+#   CI job exists for small/standard tranches and reproducibility, NOT as the
+#   only way to generate the library.
+# =============================================================================
+
+name: Generate predefined library
+
+on:
+  workflow_dispatch:
+    inputs:
+      tranche:
+        description: "Coverage tranche to generate (see ARCHITECTURE Sec 18)"
+        required: true
+        type: choice
+        default: "tranche-1"
+        options:
+          - tranche-1   # preflop 100bb full tree + small flop sample (M0/M1)
+          - tranche-2   # preflop all depths + SRP BTN/BB 100bb canonical flops (M2)
+          - preflop-only
+          - smoke       # tiny set, fast — for pipeline validation only
+      iterations:
+        description: "Override target iterations (blank = per-tranche default)"
+        required: false
+        type: string
+      validate_against_reference:
+        description: "Run reference-solver validation on a benchmark subset (M2)"
+        required: true
+        type: boolean
+        default: true
+  # Optional cadence to refresh/extend the library deliberately. Disabled by
+  # default (commented) because runs are long and should be intentional.
+  # schedule:
+  #   - cron: "0 3 1 * *"   # 03:00 on the 1st of each month
+
+permissions:
+  contents: read   # NOTE: bump to `write` + use a PR action if you want this job
+                   # to open a PR with the generated assets. See step 6.
+
+env:
+  RUST_TOOLCHAIN: "1.82.0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  generate:
+    name: Generate + validate + encode (tranche=${{ inputs.tranche }})
+    runs-on: ubuntu-latest
+    # Long jobs: raise the timeout, but understand GitHub-hosted runners still
+    # cap at 6h/job. Heavy tranches => run locally instead (see header).
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (native, no wasm target)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "engine -> target"
+          key: native-gen
+
+      - name: Setup Node (orchestration / encoding tooling)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: tools/library-gen/package-lock.json
+
+      # The generator reuses the SAME Rust solver core compiled NATIVELY (ADR-009),
+      # so cache entries share validated solving logic with the live engine.
+      - name: Build native generator (release)
+        working-directory: engine
+        run: cargo build --release --bin generate-library
+
+      - name: Generate solutions for tranche
+        working-directory: engine
+        run: |
+          echo "Generating tranche=${{ inputs.tranche }} iterations=${{ inputs.iterations }}"
+          # TODO(impl): invoke the native generator binary, e.g.:
+          #   ./target/release/generate-library \
+          #     --tranche "${{ inputs.tranche }}" \
+          #     ${{ inputs.iterations && format('--iterations {0}', inputs.iterations) || '' }} \
+          #     --out ../artifacts/library
+          mkdir -p ../artifacts/library
+
+      # Validate generated entries against the reference solver on a benchmark
+      # subset, within tolerance (RISK-004/014, M2). SDET co-owns the reference.
+      - name: Validate vs reference solver (benchmark subset)
+        if: ${{ inputs.validate_against_reference }}
+        working-directory: engine
+        run: |
+          echo "TODO(impl): run reference-solver validation, fail if any entry"
+          echo "exceeds exploitability tolerance <from QUALITY_GATES.md>."
+
+      # Encode validated entries to the ADR-007 two-tier format:
+      #   - compressed binary shards (quantized strategies, Brotli/gzip)
+      #   - a small index.json mapping LookupKeyString -> shard/offset + GenerationMeta
+      #   - integrity hash + formatVersion stamped (NFR-011)
+      - name: Encode shards + index (ADR-007 format)
+        run: |
+          echo "TODO(impl): node tools/library-gen/encode.mjs --in artifacts/library --out frontend/public/library"
+          echo "Produces: frontend/public/library/index.json + frontend/public/library/shards/*.bin"
+
+      - name: Upload generated library artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: predefined-library-${{ inputs.tranche }}
+          path: |
+            frontend/public/library/index.json
+            frontend/public/library/shards
+          retention-days: 30
+          if-no-files-found: error
+
+      # The generated, validated assets are then committed into the repo as the
+      # bundled library (versioned). Two options:
+      #   A) Download the artifact, review locally, commit by hand (simplest;
+      #      keeps a human in the loop for the trust-bearing cache — recommended).
+      #   B) Have this job open a PR automatically (requires `contents: write` +
+      #      a create-pull-request action). Keep it as a PR (never push to main)
+      #      so the trust review + ci.yml gates run on the new shards.
+      - name: Summary
+        run: |
+          echo "Generated tranche=${{ inputs.tranche }}." >> "$GITHUB_STEP_SUMMARY"
+          echo "Download the 'predefined-library-*' artifact, review, and commit" >> "$GITHUB_STEP_SUMMARY"
+          echo "to frontend/public/library/ (versioned). ci.yml validates on PR." >> "$GITHUB_STEP_SUMMARY"

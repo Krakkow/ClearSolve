@@ -1,0 +1,50 @@
+# ============================================================================
+# STARTER / TEMPLATE — Netlify deploy config (ALTERNATIVE host to Cloudflare Pages)
+# ClearSolve (Personal Browser-Native NLHE GTO Solver)
+# ----------------------------------------------------------------------------
+# Owner: DevOps Engineer Agent
+# Cross-refs: TECH_DECISIONS ADR-008 (host = Cloudflare Pages preferred / Netlify
+#             acceptable), GATE-B (deployment-target approval gate), RISK-006.
+#
+# HOW TO USE:
+#   This is a TEMPLATE. Only ONE host is the deploy target (pending GATE-B approval).
+#   - If Cloudflare Pages is approved (recommended): you do NOT need this file at all.
+#     `public/_headers` is sufficient there; delete this template.
+#   - If Netlify is approved: rename this to `netlify.toml` at the repo root.
+#
+# NOTE ON HEADERS: `public/_headers` ALSO works on Netlify, so the [[headers]]
+# block below is REDUNDANT with that file. Pick ONE source of truth for headers
+# to avoid drift. Recommended: keep headers in `public/_headers` (portable across
+# both hosts) and use this file ONLY for build settings + SPA redirect.
+# ============================================================================
+
+[build]
+  # Build the whole polyglot pipeline (Rust->WASM then Vite). See package.json
+  # scripts and DEVOPS.md "Build Orchestration".
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Rust/wasm toolchain is NOT pre-installed on Netlify build images by default.
+  # Prefer building the WASM artifact in GitHub Actions CI and committing/uploading
+  # it, OR install the toolchain in the build command. See DEVOPS.md
+  # "CI vs host-build" decision. If building on Netlify, prepend toolchain install
+  # to the command above (rustup + wasm-pack), which lengthens build minutes.
+
+# --- SPA fallback: serve index.html for client-side routes (no backend) ---
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# --- Headers (REDUNDANT with public/_headers — keep only one source of truth) ---
+# Kept here commented as documentation of the required header set.
+# [[headers]]
+#   for = "/*"
+#   [headers.values]
+#     Cross-Origin-Opener-Policy = "same-origin"
+#     Cross-Origin-Embedder-Policy = "require-corp"
+#     Cross-Origin-Resource-Policy = "same-origin"
+#     X-Content-Type-Options = "nosniff"
+#     Referrer-Policy = "no-referrer"

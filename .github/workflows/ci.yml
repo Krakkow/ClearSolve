@@ -1,0 +1,399 @@
+# =============================================================================
+# STARTER / TEMPLATE — Continuous Integration (PR + push to main)
+# ClearSolve (Personal Browser-Native NLHE GTO Solver)
+# -----------------------------------------------------------------------------
+# Owner: DevOps Engineer Agent
+# Cross-refs:
+#   - Build orchestration (Rust->WASM->Vite): TECH_DECISIONS ADR-001/004, DEVOPS.md
+#   - Quality gates + thresholds: QUALITY_GATES.md (authored by SDET Lead; THRESHOLDS
+#     BELOW ARE PLACEHOLDERS — replace `<from QUALITY_GATES.md>` once that doc lands)
+#   - Test strategy / stages: TEST_STRATEGY.md (SDET Lead, in parallel)
+#   - Bundle-size / memory risks: RISK-003 / RISK-010
+#   - Cross-origin isolation for E2E (Playwright needs COOP/COEP): RISK-006, ADR-003
+#
+# DESIGN NOTES:
+#   * Runs on LINUX runners (ubuntu-latest). Dev machines are Windows/PowerShell;
+#     see DEVOPS.md "Local Setup (Windows)" for parity notes.
+#   * Polyglot caching: cargo registry + git + target dir, the wasm toolchain,
+#     and node_modules are all cached to keep PR feedback fast.
+#   * The WASM artifact is built ONCE in `build-wasm` and shared with downstream
+#     jobs via actions artifacts so we don't recompile Rust in every job.
+#   * This file is a STARTER. Some stages are gated with `continue-on-error` /
+#     placeholders until the corresponding tooling is scaffolded in the
+#     implementation phase. Search for "TODO(impl)".
+# =============================================================================
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pin toolchain versions for reproducibility. Bump deliberately.
+  RUST_TOOLCHAIN: "1.82.0"
+  WASM_PACK_VERSION: "0.13.1"
+  NODE_VERSION: "20"
+  CARGO_TERM_COLOR: always
+  # Fail the Rust build on warnings in CI (keep the engine clean).
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) BUILD WASM ENGINE (Rust -> WASM). Produces the artifact consumed by Vite
+  #    and by the frontend test jobs. Built once, reused everywhere.
+  # ---------------------------------------------------------------------------
+  build-wasm:
+    name: Build WASM engine (Rust -> wasm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      # Caches cargo registry, git deps, and the target dir keyed on Cargo.lock.
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          # The Rust crate lives under engine/ (adjust to real layout in impl).
+          workspaces: "engine -> target"
+          # Separate cache for the wasm target vs native (offline-gen) builds.
+          key: wasm32
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack@${{ env.WASM_PACK_VERSION }}
+
+      # The single-threaded build is the guaranteed baseline (ADR-003).
+      # TODO(impl): add a second invocation for the multi-threaded variant
+      #   (RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals',
+      #    -Z build-std on nightly) once the threaded engine variant exists.
+      - name: Build WASM (single-thread baseline)
+        working-directory: engine
+        run: |
+          wasm-pack build --release --target web --out-dir ../frontend/src/wasm/pkg
+        # TODO(impl): point --out-dir at the real frontend consumption path.
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-pkg
+          path: frontend/src/wasm/pkg
+          retention-days: 7
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 2) RUST ENGINE TESTS + LINT (cargo test / fmt / clippy). Native target.
+  #    Includes the SOLVER CORRECTNESS / TRUST checks that live in Rust
+  #    (deterministic seeded solves, frequency-sum invariants, CFR+ vs vanilla
+  #    oracle). Heavy reference-solver benchmarks run in the separate
+  #    `trust-harness` job (they can exceed normal PR time budgets).
+  # ---------------------------------------------------------------------------
+  rust-tests:
+    name: Rust engine — fmt, clippy, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "engine -> target"
+          key: native
+
+      - name: rustfmt (formatting gate)
+        working-directory: engine
+        run: cargo fmt --all --check
+
+      - name: clippy (lint gate)
+        working-directory: engine
+        run: cargo clippy --all-targets --all-features
+
+      - name: cargo test (engine unit + determinism + invariants)
+        working-directory: engine
+        run: cargo test --all-features --release
+
+  # ---------------------------------------------------------------------------
+  # 3) FRONTEND: lint + type-check + unit (Vitest). Needs the WASM artifact so
+  #    type-checking and unit tests that import the wasm glue resolve.
+  # ---------------------------------------------------------------------------
+  frontend-checks:
+    name: Frontend — lint, typecheck, unit (Vitest)
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: frontend/src/wasm/pkg
+
+      - name: Lint (ESLint)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Type-check (tsc --noEmit)
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Unit tests (Vitest) + coverage
+        working-directory: frontend
+        run: npm run test:unit -- --coverage
+        # GATE: coverage threshold is enforced in vitest.config (coverage.thresholds)
+        #       per QUALITY_GATES.md. TODO(impl): wire `<from QUALITY_GATES.md>`.
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 4) BUILD the SPA (Vite) consuming the WASM artifact, then enforce a
+  #    BUNDLE-SIZE BUDGET (RISK-003). The build output is uploaded for E2E +
+  #    (on main) for deploy.
+  # ---------------------------------------------------------------------------
+  build-app:
+    name: Build SPA (Vite) + bundle-size budget
+    runs-on: ubuntu-latest
+    needs: [build-wasm, frontend-checks]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
+          path: frontend/src/wasm/pkg
+
+      - name: Build (production)
+        working-directory: frontend
+        run: npm run build
+
+      # Bundle-size budget gate. RISK-003: keep app shell + WASM small; the
+      # predefined-library shards are lazy and excluded from the initial budget.
+      # TODO(impl): replace with a real check (e.g. `size-limit`, `bundlesize`,
+      # or a custom script) reading thresholds from QUALITY_GATES.md.
+      - name: Bundle-size budget
+        working-directory: frontend
+        run: |
+          echo "TODO(impl): enforce initial-load JS+WASM budget <from QUALITY_GATES.md>"
+          echo "Hint: measure dist/assets/*.js + dist/assets/*.wasm gzip size."
+        # continue-on-error until the real budget script is wired:
+        continue-on-error: true
+
+      - name: Verify cross-origin-isolation headers config is present
+        run: |
+          test -f public/_headers || { echo "::error::public/_headers (COOP/COEP) missing — multi-thread WASM would break (RISK-006)"; exit 1; }
+          grep -q "Cross-Origin-Embedder-Policy" public/_headers || { echo "::error::COEP header missing from public/_headers"; exit 1; }
+          grep -q "Cross-Origin-Opener-Policy" public/_headers || { echo "::error::COOP header missing from public/_headers"; exit 1; }
+
+      - name: Upload SPA build
+        uses: actions/upload-artifact@v4
+        with:
+          name: spa-dist
+          path: frontend/dist
+          retention-days: 7
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 5) E2E (Playwright). MUST run against a server that sends COOP/COEP so the
+  #    multi-thread path and `crossOriginIsolated` flows are exercised
+  #    (RISK-006, ADR-003). The Playwright webServer must set these headers.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E (Playwright, cross-origin isolated)
+    runs-on: ubuntu-latest
+    needs: build-app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+      - name: Download SPA build
+        uses: actions/download-artifact@v4
+        with:
+          name: spa-dist
+          path: frontend/dist
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # The Playwright config's `webServer` must serve `dist/` WITH the COOP/COEP
+      # headers (a tiny static server that injects them, or `vite preview` plus a
+      # header middleware). Otherwise SharedArrayBuffer tests fail.
+      # TODO(impl): ensure playwright.config webServer sends COOP/COEP (see DEVOPS.md).
+      - name: Run E2E
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 6) SECURITY / DEPENDENCY SCAN (lean — no backend). npm audit + cargo audit.
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security — dependency audit (npm + cargo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+      - name: npm audit (high+)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+        continue-on-error: true # advisory until triaged per QUALITY_GATES.md
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: cargo audit
+        working-directory: engine
+        run: |
+          cargo install cargo-audit --locked || true
+          cargo audit
+        continue-on-error: true # advisory until triaged
+
+  # ---------------------------------------------------------------------------
+  # 7) SOLVER TRUST / CORRECTNESS HARNESS (reference-solver benchmark).
+  #    Validates BOTH live-solve and predefined-cache output against a reference
+  #    solver on a fixed spot suite within tolerance (RISK-004 / RISK-014,
+  #    NFR-004/005/011, ARCHITECTURE Sec 8, M2 trust gate).
+  #
+  #    This can be SLOW (high iteration counts). To respect PR feedback time, it
+  #    runs a FAST SUBSET on PRs and the FULL suite on a schedule / on main.
+  #    Heavy offline reference-solver runs that exceed CI limits belong in the
+  #    offline-generation pipeline (see generate-library.yml), NOT here.
+  # ---------------------------------------------------------------------------
+  trust-harness:
+    name: Solver trust harness (correctness vs reference)
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "engine -> target"
+          key: native
+      - name: Run trust harness
+        working-directory: engine
+        run: |
+          # On PRs: fast subset. On main / schedule: full suite.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Running FAST trust subset (PR)"
+            # TODO(impl): cargo test --release --features trust-harness -- --test-threads=1 fast_suite
+          else
+            echo "Running FULL trust suite (main/schedule)"
+            # TODO(impl): cargo test --release --features trust-harness -- full_suite
+          fi
+          echo "TODO(impl): exploitability tolerance gate <from QUALITY_GATES.md>"
+        continue-on-error: true # until the harness + reference oracle land (SDET co-owns)
+
+      - name: Upload trust report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust-report
+          path: engine/trust-report
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 8) CI GATE AGGREGATOR — single required status for branch protection.
+  #    Set THIS job as the required check; it fails if any hard gate failed.
+  # ---------------------------------------------------------------------------
+  ci-gate:
+    name: CI gate (required)
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [rust-tests, frontend-checks, build-app, e2e, security, trust-harness]
+    steps:
+      - name: Enforce required jobs
+        run: |
+          # Hard gates (must succeed). `security` and `trust-harness` are advisory
+          # for now (continue-on-error inside); promote them to hard gates once
+          # thresholds are finalized in QUALITY_GATES.md.
+          for r in \
+            "rust-tests=${{ needs.rust-tests.result }}" \
+            "frontend-checks=${{ needs.frontend-checks.result }}" \
+            "build-app=${{ needs.build-app.result }}" \
+            "e2e=${{ needs.e2e.result }}"; do
+            name="${r%%=*}"; res="${r##*=}"
+            echo "$name -> $res"
+            if [ "$res" != "success" ]; then
+              echo "::error::Required job '$name' did not succeed (result=$res)"
+              exit 1
+            fi
+          done
+          echo "All required gates passed."

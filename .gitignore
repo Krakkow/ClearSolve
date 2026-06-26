@@ -1,0 +1,43 @@
+# =============================================================================
+# .gitignore — ClearSolve (starter; DevOps-owned for build/CI hygiene)
+# The implementation phase will extend this as the app is scaffolded.
+# =============================================================================
+
+# --- Secrets / local env (NEVER commit) ---
+.env
+.env.local
+.env.*.local
+
+# --- Node / frontend ---
+node_modules/
+frontend/node_modules/
+tools/library-gen/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+*.log
+npm-debug.log*
+
+# --- Root-level app (first vertical slice scaffolded at repo root) ---
+dist/
+coverage/
+.tmp/
+
+# --- Rust / WASM ---
+# Generated wasm-pack output is reproduced from source — do NOT commit.
+frontend/src/wasm/pkg/
+engine/target/
+target/
+**/*.rs.bk
+
+# --- Offline-generation working dir (the FINAL validated library IS committed
+#     under frontend/public/library/, but intermediate artifacts are not) ---
+artifacts/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

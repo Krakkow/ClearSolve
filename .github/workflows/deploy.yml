@@ -1,0 +1,148 @@
+# =============================================================================
+# STARTER / TEMPLATE — Deploy (preview on PR, production on main w/ approval)
+# ClearSolve (Personal Browser-Native NLHE GTO Solver)
+# -----------------------------------------------------------------------------
+# Owner: DevOps Engineer Agent
+# Cross-refs: TECH_DECISIONS ADR-008 + GATE-B (deployment target — APPROVAL GATE,
+#             Cloudflare Pages preferred / Netlify acceptable), RISK-006.
+#
+# APPROVAL GATES (do NOT enable production deploy without sign-off):
+#   1) GATE-B: which host (Cloudflare Pages vs Netlify) is the final target.
+#   2) Production deployment itself uses a GitHub ENVIRONMENT ("production") with
+#      a required reviewer, so a human must approve each production release.
+#
+# This template shows the CLOUDFLARE PAGES path (preferred). A Netlify variant is
+# documented in DEVOPS.md. Most static hosts also support their OWN git
+# integration (auto-deploy previews on PR) WITHOUT this workflow at all — that is
+# the simplest option for a personal-use tool and is the RECOMMENDED default.
+# This workflow is the explicit, auditable alternative when you want CI to gate
+# the deploy on the SAME build + tests as ci.yml.
+# =============================================================================
+
+name: Deploy
+
+on:
+  # Deploy previews for PRs (non-production). Optional — the host's native git
+  # integration can do this instead.
+  pull_request:
+    branches: [main]
+  # Production deploy on merge to main, behind the `production` environment gate.
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false # never cancel an in-flight production deploy
+
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write # to comment the preview URL on the PR
+
+jobs:
+  build:
+    name: Build for deploy (reuses ci.yml steps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.82.0"
+          targets: wasm32-unknown-unknown
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "engine -> target"
+          key: wasm32
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - name: Build WASM
+        working-directory: engine
+        run: wasm-pack build --release --target web --out-dir ../frontend/src/wasm/pkg
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+      - name: Build SPA
+        working-directory: frontend
+        run: npm run build
+      # public/_headers (COOP/COEP) is copied into dist by Vite — verify it shipped.
+      - name: Verify COOP/COEP headers shipped in dist
+        run: |
+          test -f frontend/dist/_headers || { echo "::error::dist/_headers missing — cross-origin isolation would break (RISK-006)"; exit 1; }
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-dist
+          path: frontend/dist
+          if-no-files-found: error
+
+  # --- PREVIEW deploy (PRs) — no approval needed; isolated preview URL ---
+  preview:
+    name: Deploy PR preview (Cloudflare Pages)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy-dist
+          path: dist
+      - name: Publish preview to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # `pages deploy` to a NON-production branch creates a preview deployment
+          # with its own URL. Cloudflare honors the `_headers` file on previews too.
+          command: pages deploy dist --project-name=clearsolve --branch=${{ github.head_ref }}
+      # TODO(impl): post the preview URL back as a PR comment.
+
+  # --- PRODUCTION deploy (main) — REQUIRES approval via the `production` env ---
+  production:
+    name: Deploy production (Cloudflare Pages) [APPROVAL REQUIRED]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: production # <-- configure a REQUIRED REVIEWER on this environment in
+                       #     repo Settings > Environments. This is the human
+                       #     approval gate for every production release.
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy-dist
+          path: dist
+      - name: Publish production to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=clearsolve --branch=main
+
+      # SMOKE CHECK: confirm the deployed site is cross-origin isolated, else the
+      # multi-thread engine silently degrades (RISK-006). This is the single most
+      # important post-deploy assertion for this app.
+      - name: Smoke check — COOP/COEP headers live
+        run: |
+          URL="${{ steps.deploy.outputs.url }}"
+          echo "Checking headers at $URL"
+          HDRS=$(curl -sSI "$URL")
+          echo "$HDRS"
+          echo "$HDRS" | grep -i "cross-origin-opener-policy: same-origin"  || { echo "::error::COOP header missing on live site"; exit 1; }
+          echo "$HDRS" | grep -i "cross-origin-embedder-policy: require-corp" || { echo "::error::COEP header missing on live site"; exit 1; }
+
+  # ROLLBACK: Cloudflare Pages keeps every deployment immutable; rollback =
+  # re-promote a previous deployment in the dashboard or `wrangler pages
+  # deployment ...`. See DEVOPS.md "Rollback". No data migration risk (no backend).

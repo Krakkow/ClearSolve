@@ -1,0 +1,70 @@
+.range-editor {
+  margin-top: 0.4rem;
+  padding: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+
+.re-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.4rem;
+}
+
+.re-title {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+}
+
+.re-frac {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.re-grid {
+  display: grid;
+  grid-template-columns: repeat(13, 1fr);
+  gap: 1px;
+}
+
+.re-cell {
+  aspect-ratio: 1;
+  font-size: 0.46rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 2px;
+  background: #2a2f37;
+  color: #6b7480;
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.re-cell-on {
+  background: var(--accent);
+  color: #04201d;
+}
+
+.re-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.45rem;
+}
+
+.re-done {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #04201d;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
