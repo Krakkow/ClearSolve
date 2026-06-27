@@ -35,7 +35,11 @@ show('BB vs SB  ', vsOpen(6, 'BB', 'SB'));
 show('SB vs UTG ', vsOpen(6, 'SB', 'UTG'));
 show('SB vs BTN ', vsOpen(6, 'SB', 'BTN'));
 
-console.log('\nIn-position defense (9-max, 100bb):');
-show('CO vs UTG ', vsOpen(9, 'CO', 'UTG'));
+console.log('\nIn-position defense vs a UTG open (9-max, 100bb) — defender position:');
+show('MP  vs UTG', vsOpen(9, 'MP', 'UTG'));
+show('HJ  vs UTG', vsOpen(9, 'HJ', 'UTG'));
+show('CO  vs UTG', vsOpen(9, 'CO', 'UTG'));
 show('BTN vs UTG', vsOpen(9, 'BTN', 'UTG'));
+console.log('  (BB vs UTG for reference: see above is 6-max; 9-max similar)');
+console.log('In-position vs a later open:');
 show('BTN vs CO ', vsOpen(9, 'BTN', 'CO'));

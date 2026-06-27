@@ -157,26 +157,67 @@ const SB_VS_OPEN: Partial<Record<OpenerTier, { call: string; threeBet: string }>
   },
 };
 
-// In-position (non-blind hero) facing a single earlier open. Tighter flatting than the
-// BB, more 3-bet-or-fold, but wider vs late opens. By opener tier.
-const IP_VS_OPEN: Partial<Record<OpenerTier, { call: string; threeBet: string }>> = {
-  early: {
-    call: '99-22, AJs-ATs, KQs, KJs, QJs, JTs, T9s',
-    threeBet: 'TT+, AQs+, AKo, A5s, A4s',
+// In-position (non-blind hero) facing a single earlier open — now keyed by the
+// DEFENDER's own position (later = wider; the button defends widest) AND the opener
+// tier. A defender only ever faces openers EARLIER than itself, so the opener buckets
+// available per defender are limited (e.g. the CO can't face a BTN open).
+type DefenderTier = 'btn' | 'co' | 'mid' | 'early';
+
+function defenderTier(pos: SeatPosition): DefenderTier {
+  if (pos === 'BTN') return 'btn';
+  if (pos === 'CO') return 'co';
+  if (pos === 'HJ' || pos === 'LJ') return 'mid';
+  return 'early'; // MP, UTG1 (UTG is first and never a defender)
+}
+
+const IP_DEF: Record<DefenderTier, Partial<Record<OpenerTier, { call: string; threeBet: string }>>> = {
+  btn: {
+    early: {
+      call: '88-22, A9s+, KTs+, QTs+, J9s+, T9s, 98s, AJo+, KQo',
+      threeBet: 'TT+, AQs+, AKo, A5s, A4s, KQs',
+    },
+    mid: {
+      call: '77-22, A8s+, K9s+, Q9s+, J9s+, T8s+, 98s, 87s, ATo+, KJo+, QJo',
+      threeBet: 'TT+, A9s+, A5s-A2s, KTs+, QTs+, JTs, AJo+, KQo, A5o',
+    },
+    late: {
+      call: '66-22, A5s+, K8s+, Q8s+, J8s+, T8s+, 97s+, 87s, 76s, 65s, A9o+, KTo+, QJo',
+      threeBet: '99+, A8s+, A5s-A2s, K9s+, QTs+, J9s+, T9s, ATo+, KJo+, A5o',
+    },
+  },
+  co: {
+    early: {
+      call: '99-22, AJs-ATs, KQs, KJs, QJs, JTs, T9s',
+      threeBet: 'TT+, AQs+, AKo, A5s, A4s',
+    },
+    mid: {
+      call: '88-22, A9s+, KJs+, QTs+, J9s+, T9s, 98s, AQo+',
+      threeBet: 'TT+, AJs+, A5s-A4s, KQs, AQo+',
+    },
   },
   mid: {
-    call: '99-22, ATs+, KTs+, QTs+, JTs, T9s, 98s, AQo+',
-    threeBet: 'JJ+, AJs+, A5s-A4s, KQs, AQo+',
+    early: {
+      call: '99-22, ATs+, KJs+, QJs, JTs, T9s',
+      threeBet: 'JJ+, AQs+, AKo, A5s',
+    },
+    mid: {
+      call: '88-22, ATs+, KTs+, QTs+, JTs, T9s, 98s, AQo+',
+      threeBet: 'JJ+, AJs+, A5s-A4s, KQs, AQo+',
+    },
   },
-  late: {
-    call: '88-22, A9s+, KTs+, QTs+, J9s+, T9s, 98s, 87s, AJo+, KQo',
-    threeBet: 'TT+, AJs+, A5s-A3s, KJs+, QJs, AQo+, A5o',
-  },
-  btn: {
-    call: '77-22, A8s+, K9s+, Q9s+, J9s+, T8s+, 98s, 87s, 76s, ATo+, KJo+',
-    threeBet: 'TT+, ATs+, A5s-A2s, KJs+, QTs+, JTs, AJo+, KQo, A5o',
+  early: {
+    early: {
+      call: '99-22, AJs-ATs, KQs, QJs, JTs',
+      threeBet: 'JJ+, AQs+, AKo, A5s',
+    },
   },
 };
+
+/** IP entry for (defender, opener tier), falling back to the closest available bucket. */
+function ipEntry(heroPosition: SeatPosition, tier: OpenerTier): { call: string; threeBet: string } | null {
+  const byOpener = IP_DEF[defenderTier(heroPosition)];
+  return byOpener[tier] ?? byOpener.mid ?? byOpener.early ?? null;
+}
 
 /** Build a defense node (fold / call / 3-bet) from curated call + 3-bet ranges. */
 function buildDefenseNode(
@@ -237,13 +278,11 @@ function rfiChart(spot: SpotConfigV2): ChartResult | null {
   };
 }
 
-/** Pick the response table for the hero facing a single open. */
-function responseTable(
-  heroPosition: SeatPosition,
-): Partial<Record<OpenerTier, { call: string; threeBet: string }>> {
-  if (heroPosition === 'BB') return BB_VS_OPEN;
-  if (heroPosition === 'SB') return SB_VS_OPEN;
-  return IP_VS_OPEN; // any non-blind seat in position vs the opener
+/** The curated { call, 3-bet } entry for the hero facing an open at `tier`. */
+function vsOpenEntry(heroPosition: SeatPosition, tier: OpenerTier): { call: string; threeBet: string } | null {
+  if (heroPosition === 'BB') return BB_VS_OPEN[tier] ?? null;
+  if (heroPosition === 'SB') return SB_VS_OPEN[tier] ?? null;
+  return ipEntry(heroPosition, tier); // defender-position-aware (BTN > CO > HJ > MP)
 }
 
 /** vs-open chart lookup: hero (blind or in position) facing exactly one open, no callers. */
@@ -258,7 +297,7 @@ function defenseChart(spot: SpotConfigV2): ChartResult | null {
   const openerSeat = seatLayout(spot.tableSize).find((s) => s.seatIndex === opener.seatIndex);
   if (!openerSeat) return null;
   const tier = openerTier(openerSeat.position);
-  const entry = responseTable(spot.heroPosition)[tier];
+  const entry = vsOpenEntry(spot.heroPosition, tier);
   if (!entry) return null; // e.g. SB/IP never faces an 'sb' opener
 
   const openTo = opener.toBb ?? 2.5;

@@ -117,16 +117,20 @@ describe('predefined RFI charts (E4)', () => {
     expect(vsBtn).toBeGreaterThan(vsCo);
   });
 
-  it('serves an in-position vs-open chart for a non-blind hero (fold/call/3-bet)', () => {
+  it('in-position vs-open charts are defender-position aware (BTN > CO > HJ) and < BB', () => {
     const coVsUtg = lookupChart(vsOpen(9, 'CO', 'UTG'));
     expect(coVsUtg).not.toBeNull();
     expect(coVsUtg!.heroNode.actionLabels).toContain('call');
     expect(coVsUtg!.heroNode.actionLabels).toContain('3bet');
-    // The BB (closing, with odds) defends wider than an in-position seat vs the same open.
-    // (v1: IP defenders share a chart by opener tier; per-defender-position is future.)
-    const ip = defendPct(vsOpen(9, 'CO', 'UTG'))!;
+    // Later in-position seats defend wider vs the same UTG open.
+    const hj = defendPct(vsOpen(9, 'HJ', 'UTG'))!;
+    const co = defendPct(vsOpen(9, 'CO', 'UTG'))!;
+    const btn = defendPct(vsOpen(9, 'BTN', 'UTG'))!;
+    expect(co).toBeGreaterThan(hj);
+    expect(btn).toBeGreaterThan(co);
+    // ...and the BB (closing, with odds) defends wider still than the button.
     const bb = defendPct(vsOpen(9, 'BB', 'UTG'))!;
-    expect(bb).toBeGreaterThan(ip);
+    expect(bb).toBeGreaterThan(btn);
   });
 
   it('misses (-> live fallback) for off-grid depth, facing action, BB, and custom ranges', () => {
