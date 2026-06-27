@@ -98,7 +98,19 @@ docs/        design docs (PRD, ARCHITECTURE, DATA_MODEL, ...) — see map below
 - **TypeScript engine, not Rust→WASM yet.** Correct and fast enough for preflop, but the production engine swap is still pending.
 - **Multiway is a labeled estimate**, not true multiway GTO (3+ player games are general-sum — no single equilibrium). Reference-grade multiway needs precomputed charts (future work). Heads-up-resolved spots are the trustworthy ones.
 - **Opponent ranges are heuristic defaults** (editable). Multiway opens are *position-calibrated estimates*, not chart-exact.
-- **No cache / persistence / practice mode yet.**
+- **Only RFI is solver-generated; vs-open / vs-3-bet stay curated.** Solving the response spots offline via the current 2-player reduction was evaluated and **rejected** (see [finding](#finding-solver-generated-response-charts-need-a-better-engine)) — it produced *less* accurate output than the curated reference charts.
+- **No persistence / practice mode yet.**
+
+### Finding: solver-generated response charts need a better engine
+
+We tried extending the offline pipeline (`gen:library`) to *solve* vs-open and vs-3-bet charts instead of curating them. The output was **structurally worse** than the curated charts — not a tuning/convergence issue:
+
+- **vs-3-bet:** the opener "called" ~61% facing a 3-bet (should fold ~85%) — the depth-2 pot geometry in the 2-player reduction is wrong.
+- **In-position defense collapsed** (MP = HJ = CO = BTN): the 2-player reduction can't represent defender position, so the per-defender granularity is lost.
+- **Blind-vs-blind wrong** (BB vs SB defended too tight): the realization-edge model assumes the opener is in position.
+- **CO and BTN openers collapse** because the opener's *assumed* range is tier-based.
+
+RFI generation works only because it has a deliberate position-aware realization-edge model; the response spots have no analogous model, and the 2-player reduction is too coarse. **Conclusion:** solver-generated response/multiway charts are gated on a genuinely better engine (Rust→WASM with proper multiway / postflop), not more heuristics on the current TypeScript 2-player model.
 
 ---
 
@@ -116,7 +128,9 @@ Coverage includes: 7-card evaluator cross-validation, known equities (AA vs KK �
 
 **Done:** HU push/fold solver · HU preflop bet-tree CFR+ · generalized 2–9-handed preflop tool · full action taxonomy · scenario builder · default ranges + inline range editor · correct cold-call pot odds · position-calibrated multiway opens · honest trust labeling · **predefined chart cache (RFI + vs-open defense + vs-3-bet, 6-max & 9-max, ~100bb) with live fallback**.
 
-**Next (candidates):** extend the offline pipeline to **solve vs-open / vs-3-bet / more depths** (RFI is solved; the rest are still curated) · broader chart coverage (4-bet pots) · **Rust→WASM engine** · tournament/ICM · local persistence (save/load) · practice/drill mode · postflop.
+**In progress:** **Rust→WASM engine** — the foundational unlock for faster live solving *and* offline generation, and the prerequisite for trustworthy solved response/multiway charts (see the finding above).
+
+**Next (candidates):** more stack-depth buckets for the (solved-RFI / curated-response) library · 4-bet pots · tournament/ICM · local persistence (save/load) · practice/drill mode · postflop · true multiway via the new engine.
 
 Original milestone planning lives in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
