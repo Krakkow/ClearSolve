@@ -95,10 +95,10 @@ export function BetTreeView({ result }: Readonly<{ result: SolveResultV2 }>) {
 
       {tier === 'predefined' ? (
         <p className="disclaimer">
-          Served instantly from a bundled <strong>curated reference chart</strong> (~100bb,
-          {' '}standard ranges) — <em>not</em> live-solved by this engine and not a claim of
-          exact GTO. Off-grid spots (other depths, facing action, custom ranges) fall back
-          to a live solve.
+          Served instantly from the bundled <strong>predefined library</strong> (~100bb).
+          The badge caption above says whether this entry is a curated reference range or
+          a solved-offline engine result. Off-grid spots (other depths, deeper nodes,
+          custom ranges) fall back to a live solve.
         </p>
       ) : (
         <p className="disclaimer">

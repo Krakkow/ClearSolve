@@ -23,7 +23,8 @@ There is a **real, runnable app**. You can configure a preflop spot, author the 
 - **Full action-frequency output** — raise (small / big / all-in), call, fold, plus **3-bet / 3-bet-shove / 4-bet-shove / 5-bet-shove**, labeled correctly by betting depth.
 - **GTO-Wizard-style visualization** — a multi-action 13×13 grid (each cell split by action proportions), a betting-tree node navigator (labeled relative to *you*, not internal jargon), per-hand strategy on hover, and node action-frequency summaries.
 - **Position-calibrated multiway opens** — open ranges tighten realistically by position (HU ~92% → BTN ~50% → CO ~32% → UTG ~16%).
-- **Predefined chart cache + live fallback** — common spots (curated reference charts, ~100bb, 6-max & 9-max) are served **instantly** with a **PREDEFINED** badge; off-grid spots fall back to the live solver. (Coverage so far: **RFI** by position; **vs a single open** — blind defense *and* in-position, defender-position aware; and **vs a 3-bet** — hero opened and faces a 3-bet → fold/call/4-bet, via a "Hero opened, vs 3-bet" mode. 4-bet+ pots and other depths fall back to live.)
+- **Predefined chart cache + live fallback** — common spots (~100bb, 6-max & 9-max) are served **instantly** with a **PREDEFINED** badge; off-grid spots fall back to the live solver. Coverage so far: **RFI** by position (now **solved offline** — real mixed frequencies, see pipeline below); **vs a single open** (blind defense *and* in-position, defender-position aware); **vs a 3-bet** (fold/call/4-bet, via a "Hero opened, vs 3-bet" mode). 4-bet+ pots and other depths fall back to live.
+- **Offline generation pipeline** — `npm run gen:library` runs the solver on the desktop (shared equity matrix, high CFR iterations — no browser limits) and writes a committed JSON library the app loads. This is how RFI charts become *solved* (with proper mixing) rather than hand-curated; it's the path to broader solved coverage.
 - **First-class, honest trust labeling** — see below.
 
 **What is *not* built yet (intentionally):** the Rust→WASM production engine, broader chart coverage (facing-action / multiple depths / a real offline-generation pipeline), local persistence, practice/drill mode, and postflop solving. These remain on the roadmap.
@@ -115,7 +116,7 @@ Coverage includes: 7-card evaluator cross-validation, known equities (AA vs KK �
 
 **Done:** HU push/fold solver · HU preflop bet-tree CFR+ · generalized 2–9-handed preflop tool · full action taxonomy · scenario builder · default ranges + inline range editor · correct cold-call pot odds · position-calibrated multiway opens · honest trust labeling · **predefined chart cache (RFI + vs-open defense + vs-3-bet, 6-max & 9-max, ~100bb) with live fallback**.
 
-**Next (candidates):** **offline chart-generation pipeline** (solve on the desktop → commit solved charts) · broader chart coverage (4-bet pots, more stack depths) · **Rust→WASM engine** · tournament/ICM · local persistence (save/load) · practice/drill mode · postflop.
+**Next (candidates):** extend the offline pipeline to **solve vs-open / vs-3-bet / more depths** (RFI is solved; the rest are still curated) · broader chart coverage (4-bet pots) · **Rust→WASM engine** · tournament/ICM · local persistence (save/load) · practice/drill mode · postflop.
 
 Original milestone planning lives in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 

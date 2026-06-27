@@ -36,10 +36,10 @@ describe('predefined RFI charts (E4)', () => {
     expect(res.trust.label).toBe('predefined');
     expect(res.trust.exploitability).toBeUndefined();
     expect(res.trust.caption.toLowerCase()).not.toContain('exact gto');
-    // pure chart: each hand's freqs sum to 1 over fold/raise.
+    // each hand's action frequencies sum to ~1 (freqs are stored rounded to 4 dp).
     for (const h of res.heroNode.hands) {
-      const sum = (h.freqs.fold ?? 0) + (h.freqs['raise-small'] ?? 0);
-      expect(sum).toBeCloseTo(1, 9);
+      const sum = Object.values(h.freqs).reduce((a, b) => a + (b ?? 0), 0);
+      expect(sum).toBeCloseTo(1, 3);
     }
   });
 
@@ -49,6 +49,24 @@ describe('predefined RFI charts (E4)', () => {
     const btn = openFreq(foldToHero(9, 'BTN'))!;
     expect(utg).toBeLessThan(co);
     expect(co).toBeLessThan(btn);
+  });
+
+  it('RFI is served from the SOLVED offline library (real mixed frequencies)', () => {
+    const s = foldToHero(6, 'BTN');
+    const chart = lookupChart(s)!;
+    expect(chart.caption.toLowerCase()).toContain('solved offline');
+    // a solved chart mixes: at least one hand opens at a strictly fractional frequency
+    // (curated charts are pure in/out — 0 or 1 only).
+    const hasMix = chart.heroNode.hands.some((h) => {
+      const open = (h.freqs['raise-small'] ?? 0) + (h.freqs.allin ?? 0);
+      return open > 0.02 && open < 0.98;
+    });
+    expect(hasMix).toBe(true);
+    // BTN opens roughly half of hands at 100bb.
+    const openFreq =
+      (chart.heroNode.nodeActionFreq['raise-small'] ?? 0) + (chart.heroNode.nodeActionFreq.allin ?? 0);
+    expect(openFreq).toBeGreaterThan(0.4);
+    expect(openFreq).toBeLessThan(0.62);
   });
 
   it('serves a blind-defense chart (BB/SB vs a single open) with fold/call/3-bet', () => {

@@ -10,7 +10,9 @@
 import { parseRange } from './range169';
 import { seatLayout } from './seatLayout';
 import { labelFor } from './actionLabels';
+import rfiLibrary from './generated/rfiLibrary.json';
 import type {
+  ActionLabel,
   CanonicalAction,
   HandStrategyV2,
   NodeStrategyV2,
@@ -269,9 +271,61 @@ function seatIndexOfPos(spot: SpotConfigV2, pos: SeatPosition): number {
   return seatLayout(spot.tableSize).find((s) => s.position === pos)?.seatIndex ?? 0;
 }
 
-/** RFI chart lookup (folds to hero, hero opens). */
+/** A solved-offline library entry (see scripts/genLibrary.ts). */
+interface GenEntry {
+  raiseDepth: number;
+  actions: CanonicalAction[];
+  actionLabels: ActionLabel[];
+  nodeActionFreq: number[];
+  hands: number[][]; // 169 rows x actions.length
+}
+const GEN_ENTRIES = rfiLibrary.entries as Record<string, GenEntry>;
+
+/** Build a NodeStrategyV2 from a solved-offline library entry. */
+function nodeFromGenEntry(e: GenEntry, heroSeatIndex: number): NodeStrategyV2 {
+  const hands: HandStrategyV2[] = e.hands.map((row, k) => {
+    const freqs: Partial<Record<CanonicalAction, number>> = {};
+    const labels: Partial<Record<CanonicalAction, ActionLabel>> = {};
+    e.actions.forEach((a, i) => {
+      freqs[a] = row[i];
+      labels[a] = e.actionLabels[i];
+    });
+    return { handClass: k, freqs, labels };
+  });
+  const nodeActionFreq: Partial<Record<CanonicalAction, number>> = {};
+  e.actions.forEach((a, i) => {
+    nodeActionFreq[a] = e.nodeActionFreq[i];
+  });
+  return {
+    nodeId: 0,
+    label: 'RFI',
+    heroSeatIndex,
+    raiseDepth: e.raiseDepth,
+    actions: e.actions,
+    actionLabels: e.actionLabels,
+    hands,
+    nodeActionFreq,
+    contrib: [0, 0],
+  };
+}
+
+/** Solved-offline RFI chart (preferred over the hand-curated one when present). */
+function generatedRfi(spot: SpotConfigV2): ChartResult | null {
+  const key = `cash|${spot.tableSize}|${spot.heroPosition}|100bb|rfi`;
+  const e = GEN_ENTRIES[key];
+  if (!e) return null;
+  return {
+    heroNode: nodeFromGenEntry(e, seatIndexOfPos(spot, spot.heroPosition)),
+    caption: `Predefined chart (solved offline, ${rfiLibrary.meta.iterations} iters) — ${spot.heroPosition} RFI, ~100bb ${spot.tableSize}-handed cash. Reproducible engine solve of the 2-player model; an estimate, not a guaranteed equilibrium.`,
+    key,
+  };
+}
+
+/** RFI chart lookup (folds to hero, hero opens). Prefers the solved library, else curated. */
 function rfiChart(spot: SpotConfigV2): ChartResult | null {
   if (!isFoldToHero(spot)) return null;
+  const gen = generatedRfi(spot);
+  if (gen) return gen;
   const rangeStr = rfiTable(spot.tableSize)?.[spot.heroPosition];
   if (!rangeStr) return null; // e.g. BB has no RFI
   return {
