@@ -106,14 +106,49 @@ function buildBetContext(
   return { priorActions, raiseDepth };
 }
 
+/** Hero's spot mode: respond to others' action, or be the opener facing a 3-bet. */
+export type HeroMode = 'respond' | 'open-vs-3bet';
+
+/** Positions that act AFTER the hero (can 3-bet the hero's open). */
+export function positionsAfterHero(tableSize: TableSize, heroPosition: SeatPosition): SeatPosition[] {
+  const order = preflopActionOrder(tableSize);
+  const layout = seatLayout(tableSize);
+  const heroIdx = order.indexOf(seatIndexOf(tableSize, heroPosition));
+  return order.slice(heroIdx + 1).map((si) => layout.find((s) => s.seatIndex === si)!.position);
+}
+
+/** betContext for "hero opened, now faces a single 3-bet from `threeBettor`". */
+function buildOpenVs3betContext(
+  tableSize: TableSize,
+  heroPosition: SeatPosition,
+  threeBettor: SeatPosition,
+  sizes: ReturnType<typeof defaultBetSizing>,
+): BetContext {
+  const heroSeat = seatIndexOf(tableSize, heroPosition);
+  const tbSeat = seatIndexOf(tableSize, threeBettor);
+  return {
+    priorActions: [
+      { seatIndex: heroSeat, kind: 'raise', toBb: sizes.openTo },
+      { seatIndex: tbSeat, kind: 'raise', toBb: sizes.threeBetTo },
+    ],
+    raiseDepth: 2,
+  };
+}
+
 export function buildSpot(
   gameMode: GameMode,
   tableSize: TableSize,
   heroPosition: SeatPosition,
   stackBb: number,
   authored: Record<number, SeatActionInput>,
+  heroMode: HeroMode = 'respond',
+  threeBettor?: SeatPosition,
 ): SpotConfigV2 {
   const sizes = defaultBetSizing();
+  const betContext =
+    heroMode === 'open-vs-3bet' && threeBettor
+      ? buildOpenVs3betContext(tableSize, heroPosition, threeBettor, sizes)
+      : buildBetContext(tableSize, heroPosition, authored);
   return {
     schemaVersion: 2,
     gameType: 'NLHE',
@@ -122,7 +157,7 @@ export function buildSpot(
     heroPosition,
     stakes: { smallBlindBb: 0.5, bigBlindBb: 1.0 },
     effectiveStackBb: stackBb,
-    betContext: buildBetContext(tableSize, heroPosition, authored),
+    betContext,
     betSizing: sizes,
   };
 }
@@ -134,6 +169,10 @@ interface AppState {
   stackBb: number;
   /** authored actions keyed by seatIndex (only seats before hero are meaningful). */
   seatActions: Record<number, SeatActionInput>;
+
+  /** 'respond' = scenario builder; 'open-vs-3bet' = hero opened, faces a 3-bet. */
+  heroMode: HeroMode;
+  threeBettor: SeatPosition;
 
   status: 'idle' | 'solving' | 'done' | 'error';
   progress: SolveProgress | null;
@@ -149,8 +188,17 @@ interface AppState {
   setSeatRaiseTo: (seatIndex: number, toBb: number) => void;
   setSeatRange: (seatIndex: number, range: number[] | undefined) => void;
   resetScenario: () => void;
+  setHeroMode: (m: HeroMode) => void;
+  setThreeBettor: (p: SeatPosition) => void;
   selectNode: (id: number) => void;
   solve: () => Promise<void>;
+}
+
+/** Default 3-bettor for a hero open: the BB if available, else the last seat to act. */
+function defaultThreeBettor(tableSize: TableSize, heroPosition: SeatPosition): SeatPosition {
+  const after = positionsAfterHero(tableSize, heroPosition);
+  if (after.length === 0) return 'BB';
+  return after.includes('BB') ? 'BB' : after[after.length - 1];
 }
 
 /** Keep hero position valid when table size changes. */
@@ -196,6 +244,8 @@ export const useStore = create<AppState>((set, get) => ({
   heroPosition: 'BTN',
   stackBb: 100,
   seatActions: {},
+  heroMode: 'respond',
+  threeBettor: 'BB',
 
   status: 'idle',
   progress: null,
@@ -207,10 +257,19 @@ export const useStore = create<AppState>((set, get) => ({
   setTableSize: (n) =>
     set((s) => {
       const hero = clampHero(n, s.heroPosition);
-      return { tableSize: n, heroPosition: hero, seatActions: pruneActions(n, hero, s.seatActions) };
+      return {
+        tableSize: n,
+        heroPosition: hero,
+        seatActions: pruneActions(n, hero, s.seatActions),
+        threeBettor: defaultThreeBettor(n, hero),
+      };
     }),
   setHeroPosition: (p) =>
-    set((s) => ({ heroPosition: p, seatActions: pruneActions(s.tableSize, p, s.seatActions) })),
+    set((s) => ({
+      heroPosition: p,
+      seatActions: pruneActions(s.tableSize, p, s.seatActions),
+      threeBettor: defaultThreeBettor(s.tableSize, p),
+    })),
   setStackBb: (bb) => set({ stackBb: bb }),
   setSeatAction: (seatIndex, kind) =>
     set((s) => {
@@ -235,10 +294,12 @@ export const useStore = create<AppState>((set, get) => ({
       return { seatActions: { ...s.seatActions, [seatIndex]: { ...prev, range } } };
     }),
   resetScenario: () => set({ seatActions: {} }),
+  setHeroMode: (m) => set({ heroMode: m }),
+  setThreeBettor: (p) => set({ threeBettor: p }),
   selectNode: (id) => set({ selectedNodeId: id }),
 
   solve: async () => {
-    const { gameMode, tableSize, heroPosition, stackBb, seatActions } = get();
+    const { gameMode, tableSize, heroPosition, stackBb, seatActions, heroMode, threeBettor } = get();
     try {
       seatIndexOf(tableSize, heroPosition);
     } catch (e) {
@@ -247,7 +308,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ status: 'solving', progress: null, error: null });
     try {
-      const spot = buildSpot(gameMode, tableSize, heroPosition, stackBb, seatActions);
+      const spot = buildSpot(gameMode, tableSize, heroPosition, stackBb, seatActions, heroMode, threeBettor);
 
       // Cache-first: serve a predefined chart instantly when one matches (E4).
       const chart = lookupChart(spot);

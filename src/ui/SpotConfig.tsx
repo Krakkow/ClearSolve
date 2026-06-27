@@ -4,7 +4,7 @@
 // decision node and the opponents' (default) entering ranges follow from the scenario.
 
 import { useState } from 'react';
-import { useStore, scenarioSeats, buildSpot, type ScenarioSeat } from '../app/store';
+import { useStore, scenarioSeats, buildSpot, positionsAfterHero, type ScenarioSeat } from '../app/store';
 import { validPositions } from '../domain/seatLayout';
 import { defaultRangeForSeat } from '../domain/projectSpot';
 import { RangeEditor } from './RangeEditor';
@@ -142,9 +142,14 @@ export function SpotConfig() {
   const setStackBb = useStore((s) => s.setStackBb);
   const seatActions = useStore((s) => s.seatActions);
   const resetScenario = useStore((s) => s.resetScenario);
+  const heroMode = useStore((s) => s.heroMode);
+  const setHeroMode = useStore((s) => s.setHeroMode);
+  const threeBettor = useStore((s) => s.threeBettor);
+  const setThreeBettor = useStore((s) => s.setThreeBettor);
   const solve = useStore((s) => s.solve);
   const status = useStore((s) => s.status);
   const solving = status === 'solving';
+  const tbOptions = positionsAfterHero(tableSize, heroPosition);
 
   const positions = validPositions(tableSize);
   const seats = scenarioSeats(tableSize, heroPosition, seatActions);
@@ -252,30 +257,83 @@ export function SpotConfig() {
         </div>
       </div>
 
-      <div className="scenario">
-        <div className="scenario-head">
-          <span className="scenario-title">Action before hero</span>
-          <button type="button" className="link-btn" disabled={solving} onClick={resetScenario}>
-            reset (fold to hero)
-          </button>
-        </div>
-        <p className="scenario-note">
-          Set what each seat did. Opponents use sensible default ranges for their action
-          (editable later). Seats acting after the hero are still to act.
-        </p>
-        <div className="scenario-list">
-          {rows.map(({ seat, currentBet }) => (
-            <ScenarioRow key={seat.seatIndex} seat={seat} currentBet={currentBet} spot={spot} />
-          ))}
-        </div>
-        <div className="scenario-summary">
-          <span>Pot: <strong>{pot.toFixed(1)}bb</strong></span>
-          <span>Hero to call: <strong>{heroToCall.toFixed(1)}bb</strong></span>
-          <span>Live opponents: <strong>{liveOpps}</strong></span>
-        </div>
+      <div className="mode-toggle">
+        <button
+          type="button"
+          className={`mode-btn${heroMode === 'respond' ? ' mode-btn-active' : ''}`}
+          disabled={solving}
+          onClick={() => setHeroMode('respond')}
+        >
+          Respond to action
+        </button>
+        <button
+          type="button"
+          className={`mode-btn${heroMode === 'open-vs-3bet' ? ' mode-btn-active' : ''}`}
+          disabled={solving}
+          onClick={() => setHeroMode('open-vs-3bet')}
+        >
+          Hero opened, vs 3-bet
+        </button>
       </div>
 
-      <button className="solve-btn" onClick={() => void solve()} disabled={solving}>
+      {heroMode === 'respond' ? (
+        <div className="scenario">
+          <div className="scenario-head">
+            <span className="scenario-title">Action before hero</span>
+            <button type="button" className="link-btn" disabled={solving} onClick={resetScenario}>
+              reset (fold to hero)
+            </button>
+          </div>
+          <p className="scenario-note">
+            Set what each seat did. Opponents use sensible default ranges for their action
+            (editable later). Seats acting after the hero are still to act.
+          </p>
+          <div className="scenario-list">
+            {rows.map(({ seat, currentBet }) => (
+              <ScenarioRow key={seat.seatIndex} seat={seat} currentBet={currentBet} spot={spot} />
+            ))}
+          </div>
+          <div className="scenario-summary">
+            <span>Pot: <strong>{pot.toFixed(1)}bb</strong></span>
+            <span>Hero to call: <strong>{heroToCall.toFixed(1)}bb</strong></span>
+            <span>Live opponents: <strong>{liveOpps}</strong></span>
+          </div>
+        </div>
+      ) : (
+        <div className="scenario">
+          <p className="scenario-note">
+            Hero ({heroPosition}) opens, folds around, then a 3-bet comes back. Pick who
+            3-bet — hero's response (fold / call / 4-bet) is solved.
+          </p>
+          {tbOptions.length === 0 ? (
+            <p className="field-note">
+              {heroPosition} acts last, so no one can 3-bet it. Pick an earlier hero position.
+            </p>
+          ) : (
+            <div className="field">
+              <label htmlFor="threeBettor">3-bet from</label>
+              <select
+                id="threeBettor"
+                value={threeBettor}
+                disabled={solving}
+                onChange={(e) => setThreeBettor(e.target.value as SeatPosition)}
+              >
+                {tbOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      <button
+        className="solve-btn"
+        onClick={() => void solve()}
+        disabled={solving || (heroMode === 'open-vs-3bet' && tbOptions.length === 0)}
+      >
         {solving ? 'Solving…' : 'Solve'}
       </button>
     </section>

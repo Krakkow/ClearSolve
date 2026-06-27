@@ -133,6 +133,43 @@ describe('predefined RFI charts (E4)', () => {
     expect(bb).toBeGreaterThan(btn);
   });
 
+  it('serves a vs-3-bet chart (hero opened, faces a 3-bet) with fold/call/4-bet', () => {
+    // 9-max: CO (seat 7) opens 2.5, BTN (seat 8) 3-bets to 11; hero is the CO opener.
+    const s = foldToHero(9, 'CO');
+    s.betContext = {
+      priorActions: [
+        { seatIndex: 7, kind: 'raise', toBb: 2.5 },
+        { seatIndex: 8, kind: 'raise', toBb: 11 },
+      ],
+      raiseDepth: 2,
+    };
+    const chart = lookupChart(s);
+    expect(chart).not.toBeNull();
+    const res = chartToResult(s, chart!);
+    expect(res.trust.label).toBe('predefined');
+    expect(res.heroNode.raiseDepth).toBe(2);
+    expect(res.heroNode.actionLabels).toContain('4bet');
+    expect(res.heroNode.actionLabels).toContain('call');
+    for (const h of res.heroNode.hands) {
+      const sum = (h.freqs.fold ?? 0) + (h.freqs.call ?? 0) + (h.freqs['raise-small'] ?? 0);
+      expect(sum).toBeCloseTo(1, 9);
+    }
+    // hero continues (call+4bet) wider vs a BLIND 3-bettor than vs an in-position one.
+    const cont = (sp: SpotConfigV2) => {
+      const c = lookupChart(sp)!;
+      return 1 - (c.heroNode.nodeActionFreq.fold ?? 0);
+    };
+    const vsBlind = foldToHero(9, 'CO');
+    vsBlind.betContext = {
+      priorActions: [
+        { seatIndex: 7, kind: 'raise', toBb: 2.5 },
+        { seatIndex: 1, kind: 'raise', toBb: 11 }, // BB 3-bets
+      ],
+      raiseDepth: 2,
+    };
+    expect(cont(vsBlind)).toBeGreaterThan(cont(s));
+  });
+
   it('misses (-> live fallback) for off-grid depth, facing action, BB, and custom ranges', () => {
     expect(lookupChart(foldToHero(6, 'BTN', 40))).toBeNull(); // wrong depth bucket
     expect(lookupChart(foldToHero(6, 'BB'))).toBeNull(); // BB has no RFI

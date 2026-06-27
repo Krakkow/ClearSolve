@@ -219,46 +219,49 @@ function ipEntry(heroPosition: SeatPosition, tier: OpenerTier): { call: string; 
   return byOpener[tier] ?? byOpener.mid ?? byOpener.early ?? null;
 }
 
-/** Build a defense node (fold / call / 3-bet) from curated call + 3-bet ranges. */
-function buildDefenseNode(
+/**
+ * Build a response node (fold / call / raise) from curated call + raise ranges at a
+ * given betting depth. depth 1 -> the raise labels as a "3-bet"; depth 2 -> a "4-bet".
+ */
+function buildResponseNode(
   callStr: string,
-  threeBetStr: string,
+  raiseStr: string,
   heroSeatIndex: number,
-  openTo: number,
-  heroBlind: number,
+  raiseDepth: number,
+  contrib: [number, number],
+  amountToCallBb: number,
 ): NodeStrategyV2 {
   const callR = parseRange(callStr);
-  const tbR = parseRange(threeBetStr);
+  const rR = parseRange(raiseStr);
   const actions: CanonicalAction[] = ['fold', 'call', 'raise-small'];
-  const amountToCallBb = Math.max(0, openTo - heroBlind);
-  const actionLabels = actions.map((a) => labelFor(a, 1, { amountToCallBb }));
+  const actionLabels = actions.map((a) => labelFor(a, raiseDepth, { amountToCallBb }));
 
   const hands: HandStrategyV2[] = [];
   let cSum = 0;
-  let tSum = 0;
+  let rSum = 0;
   for (let k = 0; k < 169; k++) {
-    const tb = tbR[k] > 0 ? 1 : 0; // 3-bet takes precedence over flat
+    const raise = rR[k] > 0 ? 1 : 0; // raise takes precedence over flat
     let call = 0;
-    if (!tb && callR[k] > 0) call = 1;
-    const fold = 1 - tb - call;
+    if (!raise && callR[k] > 0) call = 1;
+    const fold = 1 - raise - call;
     hands.push({
       handClass: k,
-      freqs: { fold, call, 'raise-small': tb },
+      freqs: { fold, call, 'raise-small': raise },
       labels: { fold: actionLabels[0], call: actionLabels[1], 'raise-small': actionLabels[2] },
     });
     cSum += call;
-    tSum += tb;
+    rSum += raise;
   }
   return {
     nodeId: 0,
-    label: 'Defense',
+    label: 'Response',
     heroSeatIndex,
-    raiseDepth: 1,
+    raiseDepth,
     actions,
     actionLabels,
     hands,
-    nodeActionFreq: { fold: 1 - (cSum + tSum) / 169, call: cSum / 169, 'raise-small': tSum / 169 },
-    contrib: [openTo, heroBlind],
+    nodeActionFreq: { fold: 1 - (cSum + rSum) / 169, call: cSum / 169, 'raise-small': rSum / 169 },
+    contrib,
   };
 }
 
@@ -305,22 +308,82 @@ function defenseChart(spot: SpotConfigV2): ChartResult | null {
   if (spot.heroPosition === 'BB') heroBlind = spot.stakes.bigBlindBb;
   else if (spot.heroPosition === 'SB') heroBlind = spot.stakes.smallBlindBb;
   const verb = spot.heroPosition === 'BB' || spot.heroPosition === 'SB' ? 'defending' : 'in position';
+  const amountToCallBb = Math.max(0, openTo - heroBlind);
   return {
-    heroNode: buildDefenseNode(entry.call, entry.threeBet, seatIndexOfPos(spot, spot.heroPosition), openTo, heroBlind),
+    heroNode: buildResponseNode(
+      entry.call,
+      entry.threeBet,
+      seatIndexOfPos(spot, spot.heroPosition),
+      1,
+      [openTo, heroBlind],
+      amountToCallBb,
+    ),
     caption: `Predefined chart (reference) — ${spot.heroPosition} ${verb} vs a ${openerSeat.position} open, ~100bb ${spot.tableSize}-handed cash. Curated standard chart, not live-solved.`,
     key: `cash|${spot.tableSize}|${spot.heroPosition}|100bb|vs-open:${openerSeat.position}`,
   };
 }
 
+// --- vs-3-BET charts (~100bb): hero OPENED and now faces a single 3-bet. Response is
+//     fold / call / 4-bet, keyed by the opener (hero) tier and whether the 3-bettor is
+//     a blind (wider, more bluffs -> defend wider) or in position (tighter -> 4-bet/fold).
+type HeroOpenTier = 'early' | 'mid' | 'late';
+
+function heroOpenTier(pos: SeatPosition): HeroOpenTier {
+  if (pos === 'CO' || pos === 'BTN') return 'late';
+  if (pos === 'HJ' || pos === 'LJ') return 'mid';
+  return 'early'; // UTG, UTG1, MP
+}
+
+const VS_3BET: Record<HeroOpenTier, Record<'blind' | 'ip', { call: string; fourBet: string }>> = {
+  early: {
+    blind: { call: 'JJ-99, AQs, AJs, KQs', fourBet: 'QQ+, AKs, AKo, A5s' },
+    ip: { call: 'JJ, AQs', fourBet: 'QQ+, AKs, AKo' },
+  },
+  mid: {
+    blind: { call: 'JJ-88, AQs, AJs, ATs, KQs, KJs, QJs', fourBet: 'QQ+, AKs, AKo, A5s, A4s' },
+    ip: { call: 'JJ-99, AQs, AJs, KQs', fourBet: 'QQ+, AKs, AKo, A5s' },
+  },
+  late: {
+    blind: { call: 'JJ-77, AQs-ATs, A5s, KQs, KJs, QJs, JTs, T9s', fourBet: 'QQ+, AKs, AKo, A5s, A4s' },
+    ip: { call: 'JJ-88, AQs, AJs, KQs, KJs, QJs', fourBet: 'TT+, AQs+, AKo, A5s' },
+  },
+};
+
+/** vs-3-bet chart: hero opened (first raise) and faces a single 3-bet (second raise). */
+function vs3betChart(spot: SpotConfigV2): ChartResult | null {
+  if (spot.betContext.raiseDepth !== 2) return null;
+  const pa = spot.betContext.priorActions;
+  const raises = pa.filter((a) => a.kind === 'raise');
+  const others = pa.filter((a) => a.kind !== 'fold' && a.kind !== 'raise');
+  if (raises.length !== 2 || others.length !== 0) return null;
+
+  const heroSeat = seatIndexOfPos(spot, spot.heroPosition);
+  if (raises[0].seatIndex !== heroSeat) return null; // hero must be the OPENER
+  const tbSeat = seatLayout(spot.tableSize).find((s) => s.seatIndex === raises[1].seatIndex);
+  if (!tbSeat) return null;
+
+  const tier = heroOpenTier(spot.heroPosition);
+  const tbType = tbSeat.position === 'SB' || tbSeat.position === 'BB' ? 'blind' : 'ip';
+  const entry = VS_3BET[tier][tbType];
+
+  const openTo = raises[0].toBb ?? 2.5;
+  const threeBetTo = raises[1].toBb ?? 11;
+  return {
+    heroNode: buildResponseNode(entry.call, entry.fourBet, heroSeat, 2, [openTo, threeBetTo], Math.max(0, threeBetTo - openTo)),
+    caption: `Predefined chart (reference) — ${spot.heroPosition} (opener) facing a 3-bet from ${tbSeat.position}, ~100bb ${spot.tableSize}-handed cash. Curated standard chart, not live-solved.`,
+    key: `cash|${spot.tableSize}|${spot.heroPosition}|100bb|vs-3bet:${tbSeat.position}`,
+  };
+}
+
 /**
  * Look up a predefined chart for the spot. Returns null on any miss (off-grid depth,
- * facing 3-bet+, custom range override, unsupported spot) → caller falls back to live.
+ * facing 4-bet+, custom range override, unsupported spot) → caller falls back to live.
  */
 export function lookupChart(spot: SpotConfigV2): ChartResult | null {
   if (spot.gameMode !== 'cash') return null;
   if (!is100bbBucket(spot.effectiveStackBb)) return null;
   if (spot.betContext.priorActions.some((a) => a.range)) return null; // custom range -> live
-  return rfiChart(spot) ?? defenseChart(spot);
+  return rfiChart(spot) ?? defenseChart(spot) ?? vs3betChart(spot);
 }
 
 /** Wrap a served chart as a full SolveResultV2 (source = 'predefined'). */

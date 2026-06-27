@@ -138,7 +138,7 @@ function rangeActionFor(action: PriorAction, raiseOrdinal: number, jamFaced: boo
  * composite (via combineComposite), and their committed chips become dead money. If no
  * one is yet in the pot (pure RFI/open), the opponent is the full-range field.
  */
-function buildComposite(spot: SpotConfigV2): {
+function buildComposite(spot: SpotConfigV2, heroSeatIndex: number): {
   weights?: Float64Array;
   extraDead: number;
   inPotOpps: number;
@@ -148,30 +148,37 @@ function buildComposite(spot: SpotConfigV2): {
   const seats = seatLayout(tableSize);
   const ranges: Float64Array[] = [];
   const committed: number[] = [];
-  let raiseOrdinal = 0;
+  let raiseOrdinal = 0; // counts ALL raises (incl. hero's own open) for bet-leveling
   let jamFaced = false;
   let currentBet = stakes.bigBlindBb; // outstanding amount-to-match in the pot
 
   for (const action of betContext.priorActions) {
     if (action.kind === 'fold') continue;
-    const seat = seats.find((s) => s.seatIndex === action.seatIndex);
-    if (!seat) continue;
-    const rat = rangeActionFor(action, raiseOrdinal, jamFaced);
-    // Per-actor range OVERRIDE (from the range editor) takes precedence over the default.
-    ranges.push(action.range ? Float64Array.from(action.range) : defaultRange(seat.position, rat, effectiveStackBb));
-    // committed chips for this opponent: a raise/jam commits its toBb; a call/limp
-    // matches the current outstanding bet (or the big blind for a limp).
+    // Hero's OWN prior action (e.g. its open, when it now faces a 3-bet) is not an
+    // opponent — skip it from the composite, but still count its raise for leveling
+    // so a subsequent re-raiser gets the correct (3-bet/4-bet) range.
+    const isHero = action.seatIndex === heroSeatIndex;
     if (action.kind === 'raise' || action.kind === 'allin') {
+      const level = raiseOrdinal;
       const to = action.toBb ?? currentBet;
-      committed.push(to);
       currentBet = Math.max(currentBet, to);
       if (action.kind === 'allin') jamFaced = true;
       raiseOrdinal++;
-    } else if (action.kind === 'limp') {
-      committed.push(stakes.bigBlindBb);
-    } else {
-      committed.push(currentBet);
+      if (isHero) continue;
+      const seat = seats.find((s) => s.seatIndex === action.seatIndex);
+      if (!seat) continue;
+      const rat = rangeActionFor(action, level, jamFaced && action.kind !== 'allin');
+      ranges.push(action.range ? Float64Array.from(action.range) : defaultRange(seat.position, rat, effectiveStackBb));
+      committed.push(to);
+      continue;
     }
+    // call / limp (non-hero)
+    if (isHero) continue;
+    const seat = seats.find((s) => s.seatIndex === action.seatIndex);
+    if (!seat) continue;
+    const rat = rangeActionFor(action, raiseOrdinal, jamFaced);
+    ranges.push(action.range ? Float64Array.from(action.range) : defaultRange(seat.position, rat, effectiveStackBb));
+    committed.push(action.kind === 'limp' ? stakes.bigBlindBb : currentBet);
   }
 
   if (ranges.length === 0) {
@@ -285,7 +292,7 @@ export function projectToBetTreeConfig(spot: SpotConfigV2): Projection {
   // The composite OPPONENT is therefore on the other side.
   const oppSide: 0 | 1 = heroSide === 'aggressor' ? 1 : 0;
 
-  const composite = buildComposite(spot);
+  const composite = buildComposite(spot, heroSeatIndex);
 
   // Dead money: antes (whole table) + the un-modeled small blind when hero is not a
   // blind + extra callers' chips folded into the pot (multiway). Used for the

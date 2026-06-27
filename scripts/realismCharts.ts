@@ -43,3 +43,19 @@ show('BTN vs UTG', vsOpen(9, 'BTN', 'UTG'));
 console.log('  (BB vs UTG for reference: see above is 6-max; 9-max similar)');
 console.log('In-position vs a later open:');
 show('BTN vs CO ', vsOpen(9, 'BTN', 'CO'));
+
+function openVs3bet(tableSize: TableSize, hero: SeatPosition, tb: SeatPosition): SpotConfigV2 {
+  const s = vsOpen(tableSize, hero, hero); // placeholder; overwrite betContext below
+  s.betContext = {
+    priorActions: [
+      { seatIndex: seatIndexOf(tableSize, hero), kind: 'raise', toBb: 2.5 },
+      { seatIndex: seatIndexOf(tableSize, tb), kind: 'raise', toBb: 11 },
+    ],
+    raiseDepth: 2,
+  };
+  return s;
+}
+console.log('\nvs a 3-bet (hero opened, 100bb) — fold/call/4-bet:');
+show('CO vs BTN 3bet', openVs3bet(9, 'CO', 'BTN'));
+show('CO vs BB  3bet', openVs3bet(9, 'CO', 'BB'));
+show('UTG vs BB 3bet', openVs3bet(9, 'UTG', 'BB'));
