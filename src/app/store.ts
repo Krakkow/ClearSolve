@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { SolverWorkerClient } from '../worker/workerClient';
 import { defaultBetSizing } from '../domain/projectSpot';
+import { lookupChart, chartToResult } from '../domain/charts';
 import { validPositions, seatIndexOf, seatLayout, preflopActionOrder } from '../domain/seatLayout';
 import type {
   AnySolveResult,
@@ -247,6 +248,15 @@ export const useStore = create<AppState>((set, get) => ({
     set({ status: 'solving', progress: null, error: null });
     try {
       const spot = buildSpot(gameMode, tableSize, heroPosition, stackBb, seatActions);
+
+      // Cache-first: serve a predefined chart instantly when one matches (E4).
+      const chart = lookupChart(spot);
+      if (chart) {
+        const result = chartToResult(spot, chart);
+        set({ status: 'done', result, progress: null, selectedNodeId: result.heroNode.nodeId });
+        return;
+      }
+
       const result: AnySolveResult = await engine.solve(
         { mode: 'preflop-spot', spot, settings: DEFAULT_SETTINGS },
         (p) => set({ progress: p }),

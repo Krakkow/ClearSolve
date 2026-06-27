@@ -142,7 +142,7 @@ export interface NodeStrategyV2 {
 export interface SolveResultV2 {
   schemaVersion: 2;
   mode: 'preflop-spot';
-  source: 'live';
+  source: 'live' | 'predefined';
   trust: TrustInfo;
   spot: SpotConfigV2;
   settings: unknown; // SolveSettings (engine/types); kept loose to avoid a cycle

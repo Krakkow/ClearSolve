@@ -23,9 +23,10 @@ There is a **real, runnable app**. You can configure a preflop spot, author the 
 - **Full action-frequency output** — raise (small / big / all-in), call, fold, plus **3-bet / 3-bet-shove / 4-bet-shove / 5-bet-shove**, labeled correctly by betting depth.
 - **GTO-Wizard-style visualization** — a multi-action 13×13 grid (each cell split by action proportions), a betting-tree node navigator (labeled relative to *you*, not internal jargon), per-hand strategy on hover, and node action-frequency summaries.
 - **Position-calibrated multiway opens** — open ranges tighten realistically by position (HU ~92% → BTN ~50% → CO ~32% → UTG ~16%).
+- **Predefined chart cache + live fallback** — common spots (curated reference charts, ~100bb, 6-max & 9-max) are served **instantly** with a **PREDEFINED** badge; off-grid spots fall back to the live solver. (Coverage so far: **RFI** by position, and **vs a single open** — blind defense *and* in-position — with the opener split down to CO vs BTN. 3-bet+ pots and other depths fall back to live.)
 - **First-class, honest trust labeling** — see below.
 
-**What is *not* built yet (intentionally):** the Rust→WASM production engine, the predefined-solution cache, local persistence, practice/drill mode, postflop solving, and the offline chart-generation pipeline. These remain on the roadmap.
+**What is *not* built yet (intentionally):** the Rust→WASM production engine, broader chart coverage (facing-action / multiple depths / a real offline-generation pipeline), local persistence, practice/drill mode, and postflop solving. These remain on the roadmap.
 
 ---
 
@@ -112,9 +113,9 @@ Coverage includes: 7-card evaluator cross-validation, known equities (AA vs KK �
 
 ## Roadmap
 
-**Done:** HU push/fold solver · HU preflop bet-tree CFR+ · generalized 2–9-handed preflop tool · full action taxonomy · scenario builder · default ranges + inline range editor · correct cold-call pot odds · position-calibrated multiway opens · honest trust labeling.
+**Done:** HU push/fold solver · HU preflop bet-tree CFR+ · generalized 2–9-handed preflop tool · full action taxonomy · scenario builder · default ranges + inline range editor · correct cold-call pot odds · position-calibrated multiway opens · honest trust labeling · **predefined chart cache (RFI + blind defense, 6-max & 9-max, ~100bb) with live fallback**.
 
-**Next (candidates):** inline-range-editor polish · **precomputed multiway charts** (true multiway fidelity) · **Rust→WASM engine** · tournament/ICM · local persistence (save/load) · practice/drill mode · postflop.
+**Next (candidates):** broader chart coverage (**vs-3-bet / 4-bet pots, more stack depths**) · **Rust→WASM engine** · tournament/ICM · local persistence (save/load) · practice/drill mode · postflop.
 
 Original milestone planning lives in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 

@@ -777,6 +777,12 @@ interface SolveResultV2 {
 
 ### 13.8 Predefined chart entry + lookup-key extension
 
+**v1 implementation status (E4).** A first cut of the predefined cache ships in `src/domain/charts.ts`: curated **reference charts** for **cash, ~100bb (75–150bb bucket), 6-max and 9-max**, covering two spot families:
+- **RFI** (folds to hero, hero opens) by position — key `cash|{tableSize}|{heroPosition}|100bb|rfi`; actions fold / open-raise.
+- **Vs a single open** (hero faces exactly one opener, no callers) — key `cash|{tableSize}|{heroPosition}|100bb|vs-open:{openerPosition}`; actions fold / call / 3-bet. Curated per opener *tier* (early / mid / late=CO / btn / sb) and per hero role: **BB** (widest), **SB** (OOP, tighter), or **in-position** (any non-blind seat). Note v1 simplification: in-position defenders share a chart by opener tier (per-defender-position granularity is future), and blind defense is keyed by opener tier (not every individual opener seat).
+
+The app's solve flow is **cache-first** — `lookupChart(spot)` is consulted before the live solver and, on a hit, `chartToResult` returns a `SolveResultV2` with `source: 'predefined'`, `trust.label: 'predefined'`, and **no exploitability** (it isn't solved here). Misses — other depths, a node deeper than a single raise (3-bet+ pots), multiway-with-callers, or any per-actor range override — fall through to the live path. These charts are **curated standard ranges, explicitly not solved by this engine** (honest caption; never "exact GTO"). Deeper nodes (vs-3-bet/4-bet), more depths, and an offline-generation pipeline remain future work. The full keyed schema below is the target for that broader coverage.
+
 The existing predefined-cache (Sec 7) is reused unchanged in structure; the **lookup key gains the new dimensions** so multiway/tournament/deep charts can be addressed:
 
 ```ts

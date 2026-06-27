@@ -29,17 +29,19 @@ export function BetTreeView({ result }: Readonly<{ result: SolveResultV2 }>) {
   );
 
   const expl = result.trust.exploitability;
-  // Drive the badge off the actual fidelity tier, not table size: a multiway TABLE
+  // Three fidelity tiers, driven by the trust label (not table size): a multiway TABLE
   // that folds to a single raiser is still a trustworthy heads-up-resolved solve.
-  const isEstimate = result.trust.label !== 'live-solve';
+  let tier: 'predefined' | 'live' | 'estimate' = 'estimate';
+  if (result.trust.label === 'predefined') tier = 'predefined';
+  else if (result.trust.label === 'live-solve') tier = 'live';
+  const isEstimate = tier === 'estimate';
+  const badgeText = { predefined: 'PREDEFINED CHART', live: 'LIVE SOLVE', estimate: 'ESTIMATE' }[tier];
 
   return (
     <section className="result">
       {/* Trust banner — prominent, honest. */}
-      <div className={`trust-banner ${isEstimate ? 'trust-estimate' : 'trust-live'}`}>
-        <span className={`badge ${isEstimate ? 'badge-estimate' : 'badge-live'}`}>
-          {isEstimate ? 'ESTIMATE' : 'LIVE SOLVE'}
-        </span>
+      <div className={`trust-banner trust-${tier}`}>
+        <span className={`badge badge-${tier}`}>{badgeText}</span>
         <span className="trust-caption">{result.trust.caption}</span>
       </div>
 
@@ -91,22 +93,31 @@ export function BetTreeView({ result }: Readonly<{ result: SolveResultV2 }>) {
         <HandPanel node={node} classIndex={hoverClass} />
       </div>
 
-      <p className="disclaimer">
-        Live CFR+ solve over the preflop raise tree (no postflop; "see-flop" terminals
-        use the standard preflop-equity model with a positional realization edge).
-        Equities from seeded Monte-Carlo (seed {result.seed}). Exploitability is an{' '}
-        <em>estimate</em> of best-response gain on the 2-player model — not a claim of
-        exact GTO{isEstimate ? ', and the multiway field is collapsed to one composite opponent' : ''}.
-        {isEstimate && result.heroNode.raiseDepth === 0 && (
-          <>
-            {' '}
-            <strong>Note:</strong> multiway opens are <em>position-calibrated</em>{' '}
-            estimates — tightened for the number of players still to act behind you
-            (a heuristic, not chart-exact). Facing-action spots (defense, cold-call,
-            squeeze) use correct pot odds.
-          </>
-        )}
-      </p>
+      {tier === 'predefined' ? (
+        <p className="disclaimer">
+          Served instantly from a bundled <strong>curated reference chart</strong> (~100bb,
+          {' '}standard ranges) — <em>not</em> live-solved by this engine and not a claim of
+          exact GTO. Off-grid spots (other depths, facing action, custom ranges) fall back
+          to a live solve.
+        </p>
+      ) : (
+        <p className="disclaimer">
+          Live CFR+ solve over the preflop raise tree (no postflop; "see-flop" terminals
+          use the standard preflop-equity model with a positional realization edge).
+          Equities from seeded Monte-Carlo (seed {result.seed}). Exploitability is an{' '}
+          <em>estimate</em> of best-response gain on the 2-player model — not a claim of
+          exact GTO{isEstimate ? ', and the multiway field is collapsed to one composite opponent' : ''}.
+          {isEstimate && result.heroNode.raiseDepth === 0 && (
+            <>
+              {' '}
+              <strong>Note:</strong> multiway opens are <em>position-calibrated</em>{' '}
+              estimates — tightened for the number of players still to act behind you
+              (a heuristic, not chart-exact). Facing-action spots (defense, cold-call,
+              squeeze) use correct pot odds.
+            </>
+          )}
+        </p>
+      )}
     </section>
   );
 }
