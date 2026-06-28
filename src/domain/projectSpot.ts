@@ -86,13 +86,6 @@ export function openRealizationEdge(behind: number): number {
   return table[behind] ?? -0.15;
 }
 
-const NODE_LABEL_BY_DEPTH: Record<number, string> = {
-  0: 'SB Open',
-  1: 'BB vs Open',
-  2: 'SB vs 3-bet',
-  3: 'BB vs 4-bet',
-  4: 'SB vs 5-bet jam',
-};
 
 /**
  * Total dead money (in bb) contributed by ANTES across all live seats, plus a
@@ -285,12 +278,22 @@ export function projectToBetTreeConfig(spot: SpotConfigV2): Projection {
   const heroSeatIndex = seatIndexOf(tableSize, heroPosition);
   const depth = betContext.raiseDepth;
 
-  // Even depth = hero is the aggressor side (acts/raises first at its layer);
-  // odd depth = hero is the responder facing the last raise.
-  const heroSide: 'aggressor' | 'responder' = depth % 2 === 0 ? 'aggressor' : 'responder';
-  // Hero occupies the SB-side (player 0) on even depth, BB-side (player 1) on odd.
-  // The composite OPPONENT is therefore on the other side.
+  // Hero is the AGGRESSOR only when OPENING the pot (RFI — no prior raise). The moment
+  // there is a raise to face, hero is a RESPONDER — regardless of how many raises came
+  // before or whether hero opened earlier. (The old depth-parity rule wrongly treated a
+  // hero facing a 3-bet as "the opener at a deeper layer", producing nonsense like the BB
+  // 4-bet-shoving everything vs an open + 3-bet, and the symmetric opener "calls 61%".)
+  const heroSide: 'aggressor' | 'responder' = depth === 0 ? 'aggressor' : 'responder';
   const oppSide: 0 | 1 = heroSide === 'aggressor' ? 1 : 0;
+
+  // Hero's chips already in the pot before this decision = its blind, or its own
+  // open/raise if it raised earlier (e.g. opened, then faces a 3-bet).
+  let heroPrior = postedBlindOf(spot, heroPosition);
+  for (const a of betContext.priorActions) {
+    if (a.seatIndex === heroSeatIndex && (a.kind === 'raise' || a.kind === 'allin') && typeof a.toBb === 'number') {
+      heroPrior = Math.max(heroPrior, a.toBb);
+    }
+  }
 
   const composite = buildComposite(spot, heroSeatIndex);
 
@@ -303,7 +306,6 @@ export function projectToBetTreeConfig(spot: SpotConfigV2): Projection {
   deadMoney += composite.extraDead;
 
   const sizes = scenarioSizes(spot);
-  const heroPosted = postedBlindOf(spot, heroPosition);
 
   // Build the 2-player config. Two cases:
   //  - HERO AGGRESSOR (open / vs-3bet): the open-vs-field model — hero posts the small
@@ -326,17 +328,25 @@ export function projectToBetTreeConfig(spot: SpotConfigV2): Projection {
     // This reduces to hero's real blind for HU/blind-defense (D shrinks to 0) and to a
     // small dead-money-adjusted post for a non-blind cold-caller (hb = 0).
     const aggPosted = aggressorPostedBlind(spot);
-    const R = raiseFacedBb(spot) || sizes.openTo;
-    const otherBlinds = Math.max(0, stakes.smallBlindBb + stakes.bigBlindBb - heroPosted - aggPosted);
+    const R = raiseFacedBb(spot) || sizes.openTo; // the bet hero faces (last raise)
+    const heroBlind = postedBlindOf(spot, heroPosition);
+    const otherBlinds = Math.max(0, stakes.smallBlindBb + stakes.bigBlindBb - heroBlind - aggPosted);
     const D = otherBlinds + anteDeadMoney(spot) + composite.extraDead;
-    const bTree = (R * (D + 2 * heroPosted)) / (2 * R + D);
+    // Pot odds use hero's REAL prior contribution (blind, or its own open if it opened).
+    const bTree = (R * (D + 2 * heroPrior)) / (2 * R + D);
+    // Hero's raise ladder shifts up with betting depth: facing an open -> 3-bet/4-bet;
+    // facing a 3-bet -> 4-bet/shove; deeper -> shove. So labels + sizes stay correct.
+    let heroRaiseTo = effectiveStackBb;
+    if (depth <= 1) heroRaiseTo = sizes.threeBetTo;
+    else if (depth === 2) heroRaiseTo = sizes.fourBetTo;
+    const oppReRaiseTo = depth <= 1 ? sizes.fourBetTo : effectiveStackBb;
     config = {
-      smallBlind: aggPosted, // the opener's blind (affects only its own fold cost)
+      smallBlind: aggPosted, // the opener/aggressor blind (affects only its own fold cost)
       bigBlind: bTree, // hero's modeled post — matches true pot odds incl. dead money
       stack: effectiveStackBb,
-      openTo: sizes.openTo,
-      threeBetTo: sizes.threeBetTo,
-      fourBetTo: sizes.fourBetTo,
+      openTo: R, // hero responds to the actual faced bet (open, 3-bet, …)
+      threeBetTo: heroRaiseTo,
+      fourBetTo: oppReRaiseTo,
     };
   } else {
     config = {
@@ -361,10 +371,13 @@ export function projectToBetTreeConfig(spot: SpotConfigV2): Projection {
 
   return {
     config,
+    // Label depth (for action names like 3-bet/4-bet) = raise count; the STRUCTURAL node
+    // is "SB Open" for an RFI open, else "BB vs Open" — hero responds to one faced bet,
+    // with sizes/labels encoding the depth.
     heroRaiseDepth: depth,
     heroSide,
     heroSeatIndex,
-    heroNodeLabel: NODE_LABEL_BY_DEPTH[depth] ?? NODE_LABEL_BY_DEPTH[4],
+    heroNodeLabel: heroSide === 'aggressor' ? 'SB Open' : 'BB vs Open',
     deadMoneyBb: deadMoney,
     oppRangeWeights: composite.weights,
     oppSide,

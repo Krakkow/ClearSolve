@@ -104,6 +104,37 @@ describe('scenario projection — composite opponent + dead money + live-opp cou
     }
   });
 
+  it('facing a 3-bet, hero is a RESPONDER (not the "opener at a deeper layer")', () => {
+    // 9-max BB; UTG opens 2.5, CO 3-bets to 11, folds elsewhere. Hero (BB) did NOT open.
+    const pa: PriorAction[] = [
+      { seatIndex: 2, kind: 'raise', toBb: 2.5 }, // UTG (9-max seat 2)
+      { seatIndex: 3, kind: 'fold' },
+      { seatIndex: 4, kind: 'fold' },
+      { seatIndex: 5, kind: 'fold' },
+      { seatIndex: 6, kind: 'fold' },
+      { seatIndex: 7, kind: 'raise', toBb: 11 }, // CO (seat 7) 3-bets
+      { seatIndex: 8, kind: 'fold' },
+      { seatIndex: 0, kind: 'fold' },
+    ];
+    const p = projectToBetTreeConfig(spot({ tableSize: 9, heroPosition: 'BB' }, pa, 2));
+    expect(p.heroSide).toBe('responder'); // regression: was 'aggressor' (depth-parity bug)
+    expect(p.heroNodeLabel).toBe('BB vs Open'); // structural responder node
+    // hero responds to the 11 bet: tree's "open" is the faced bet, raise ladder shifts up.
+    expect(p.config.openTo).toBeCloseTo(11, 6);
+    expect(p.config.threeBetTo).toBeCloseTo(24, 6); // hero's raise is a 4-bet sizing
+  });
+
+  it('an opener facing a 3-bet is also a responder (symmetric fix)', () => {
+    // CO opens 2.5, BTN 3-bets 11; hero is the CO opener.
+    const pa: PriorAction[] = [
+      { seatIndex: 7, kind: 'raise', toBb: 2.5 }, // hero CO opens
+      { seatIndex: 8, kind: 'raise', toBb: 11 }, // BTN 3-bets
+    ];
+    const p = projectToBetTreeConfig(spot({ tableSize: 9, heroPosition: 'CO' }, pa, 2));
+    expect(p.heroSide).toBe('responder');
+    expect(p.heroNodeLabel).toBe('BB vs Open');
+  });
+
   it('trust label keys on live-opp count', () => {
     const one = buildTrustInfo(spot({}, [], 0), 0.01, { liveOppCount: 1, assumedRanges: true });
     expect(one.label).toBe('live-solve');

@@ -213,14 +213,21 @@ export class PreflopEngine implements SolverEngine {
       'BB vs 4-bet': 3,
       'SB vs 5-bet jam': 4,
     };
-    const subtree = result.nodes
-      .filter((n) => n.nodeId !== heroNodeRaw.nodeId)
-      .map((n) => {
-        const d = depthByLabel[n.label] ?? 0;
-        const hc = d % 2 === 0 ? n.contrib[0] : n.contrib[1];
-        const mc = Math.max(n.contrib[0], n.contrib[1]);
-        return toNodeStrategyV2(n, d, proj.heroSeatIndex, Math.max(0, mc - hc));
-      });
+    // Continuation navigator: only meaningful for an OPEN (hero opens, then we can show
+    // "if you get 3-bet…" etc.). For a RESPONDER spot the other tree nodes are artifacts
+    // of the 2-player reduction (the opponent's "open" is really the bet hero faces), so
+    // showing them mislabels the line — collapse to just hero's decision.
+    const subtree =
+      proj.heroSide === 'aggressor'
+        ? result.nodes
+            .filter((n) => n.nodeId !== heroNodeRaw.nodeId)
+            .map((n) => {
+              const d = depthByLabel[n.label] ?? 0;
+              const hc = d % 2 === 0 ? n.contrib[0] : n.contrib[1];
+              const mc = Math.max(n.contrib[0], n.contrib[1]);
+              return toNodeStrategyV2(n, d, proj.heroSeatIndex, Math.max(0, mc - hc));
+            })
+        : [];
 
     const trust = buildTrustInfo(spot, result.exploitabilityBbPerGame, {
       liveOppCount: proj.liveOppCount,
