@@ -23,6 +23,29 @@ fn class_ranks(index: usize) -> (u32, u32, u8) {
     }
 }
 
+/// Card-removal co-occurrence weights between the 169 classes — port of pairWeights.ts.
+/// pair_weights[i*169+j] = count of non-conflicting (hero-combo, villain-combo) orderings.
+pub fn pair_weights() -> Vec<f64> {
+    let combos: Vec<Vec<[u32; 2]>> = (0..N).map(class_combos).collect();
+    let mut m = vec![0.0f64; N * N];
+    for i in 0..N {
+        for j in i..N {
+            let mut count = 0u32;
+            for &a in &combos[i] {
+                for &b in &combos[j] {
+                    if a[0] == b[0] || a[0] == b[1] || a[1] == b[0] || a[1] == b[1] {
+                        continue;
+                    }
+                    count += 1;
+                }
+            }
+            m[i * N + j] = count as f64;
+            m[j * N + i] = count as f64;
+        }
+    }
+    m
+}
+
 /// Concrete 2-card combos for a class — same enumeration order as combos.ts.
 fn class_combos(index: usize) -> Vec<[u32; 2]> {
     let (high, low, kind) = class_ranks(index);
