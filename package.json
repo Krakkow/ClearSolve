@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit",
-    "gen:library": "vite-node scripts/genLibrary.ts"
+    "gen:library": "vite-node scripts/genLibrary.ts",
+    "wasm:build": "cargo build --manifest-path engine/Cargo.toml --target wasm32-unknown-unknown --release",
+    "wasm:check": "node scripts/wasmCheck.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

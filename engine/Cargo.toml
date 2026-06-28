@@ -1,0 +1,17 @@
+[package]
+name = "clearsolve_engine"
+version = "0.1.0"
+edition = "2021"
+description = "ClearSolve NLHE preflop solver core (Rust -> WASM)."
+
+[lib]
+crate-type = ["cdylib"]
+
+# Raw wasm32 cdylib with extern \"C\" exports (no wasm-bindgen) — avoids host
+# proc-macro compilation, so no MSVC/GNU host linker is required; the wasm32 build
+# uses Rust's bundled rust-lld. Data is marshalled through wasm linear memory.
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
+codegen-units = 1
