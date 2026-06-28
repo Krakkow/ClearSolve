@@ -95,7 +95,7 @@ docs/        design docs (PRD, ARCHITECTURE, DATA_MODEL, ...) — see map below
 ## Honest limitations
 
 - **Preflop only.** No postflop solving.
-- **TypeScript engine, not Rust→WASM yet.** Correct and fast enough for preflop, but the production engine swap is still pending.
+- **Engine is being ported to Rust→WASM, incrementally.** The **equity build** (the heavy step) now runs in **Rust/WASM** in the worker (bit-identical to the old TS path, ~2.7× faster); the **CFR core is still TypeScript**. Each port is validated against the TS engine before it's wired in.
 - **Multiway is a labeled estimate**, not true multiway GTO (3+ player games are general-sum — no single equilibrium). Reference-grade multiway needs precomputed charts (future work). Heads-up-resolved spots are the trustworthy ones.
 - **Opponent ranges are heuristic defaults** (editable). Multiway opens are *position-calibrated estimates*, not chart-exact.
 - **Only RFI is solver-generated; vs-open / vs-3-bet stay curated.** Solving the response spots offline via the current 2-player reduction was evaluated and **rejected** (see [finding](#finding-solver-generated-response-charts-need-a-better-engine)) — it produced *less* accurate output than the curated reference charts.
@@ -128,7 +128,7 @@ Coverage includes: 7-card evaluator cross-validation, known equities (AA vs KK �
 
 **Done:** HU push/fold solver · HU preflop bet-tree CFR+ · generalized 2–9-handed preflop tool · full action taxonomy · scenario builder · default ranges + inline range editor · correct cold-call pot odds · position-calibrated multiway opens · honest trust labeling · **predefined chart cache (RFI + vs-open defense + vs-3-bet, 6-max & 9-max, ~100bb) with live fallback**.
 
-**In progress:** **Rust→WASM engine** — the foundational unlock for faster live solving *and* offline generation, and the prerequisite for trustworthy solved response/multiway charts (see the finding above).
+**In progress:** **Rust→WASM engine** (foundational unlock for faster solving + generation, and the prerequisite for trustworthy solved multiway charts). Done so far: toolchain + raw-wasm32 scaffold; **7-card evaluator** ported (bit-identical, 200k-hand parity); **equity matrix** ported (bit-identical, 2.7× faster) and **wired into the worker** so the app uses it. Next: port the CFR+ core, then multi-threaded wasm. Build the wasm with `npm run wasm:build` (needs the Rust toolchain); the prebuilt wasm is committed so the app builds without Rust.
 
 **Next (candidates):** more stack-depth buckets for the (solved-RFI / curated-response) library · 4-bet pots · tournament/ICM · local persistence (save/load) · practice/drill mode · postflop · true multiway via the new engine.
 

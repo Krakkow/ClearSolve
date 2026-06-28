@@ -10,7 +10,7 @@
 // Rust->WASM engine implements the same interface and replaces it without UI/worker
 // changes.
 
-import { buildEquityMatrix } from '../domain/equityMatrix';
+import { getEquityBuilder } from './equityProvider';
 import { solvePushFold } from '../domain/pushfold';
 import { solvePreflopTree } from '../domain/preflopCfr';
 import { DEFAULT_SIZES } from '../domain/betTree';
@@ -52,9 +52,10 @@ export class PreflopEngine implements SolverEngine {
     const start = nowMs();
     const { settings } = req;
 
-    // Shared heavy step: build the 169x169 all-in equity matrix (deterministic).
+    // Shared heavy step: build the 169x169 all-in equity matrix (deterministic). Uses
+    // the injected builder — Rust/WASM in the worker, TS elsewhere (equityProvider).
     onProgress({ phase: 'building-equity', fraction: 0 });
-    const equity = buildEquityMatrix(settings.equitySamples, settings.seed, (p) => {
+    const equity = await getEquityBuilder()(settings.equitySamples, settings.seed, (p) => {
       onProgress({ phase: 'building-equity', fraction: p.done / p.total });
     });
 

@@ -3,11 +3,25 @@
 // Throttles progress events to protect the main thread (API_SPEC Sec 3 rule).
 
 import { PreflopEngine } from '../engine/preflopEngine';
+import { setEquityBuilder } from '../engine/equityProvider';
+import { buildEquityMatrix } from '../domain/equityMatrix';
+import { buildEquityMatrixWasm } from '../wasm/wasmEngine';
 import {
   PROTOCOL_VERSION,
   type WorkerMessage,
   type WorkerRequest,
 } from './protocol';
+
+// Prefer the Rust/WASM equity build (bit-identical to TS, faster); fall back to the TS
+// build if the wasm fails to load for any reason. Keeps the heavy step robust.
+setEquityBuilder(async (samples, seed, onProgress) => {
+  try {
+    return await buildEquityMatrixWasm(samples, seed, onProgress);
+  } catch (e) {
+    console.warn('[worker] wasm equity unavailable, using TS build:', e);
+    return buildEquityMatrix(samples, seed, onProgress);
+  }
+});
 
 const engine = new PreflopEngine();
 

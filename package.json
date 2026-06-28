@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit",
     "gen:library": "vite-node scripts/genLibrary.ts",
-    "wasm:build": "cargo build --manifest-path engine/Cargo.toml --target wasm32-unknown-unknown --release",
+    "wasm:build": "cargo build --manifest-path engine/Cargo.toml --target wasm32-unknown-unknown --release && node scripts/copyWasm.mjs",
     "wasm:check": "node scripts/wasmCheck.mjs"
   },
   "dependencies": {
