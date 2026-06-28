@@ -487,3 +487,45 @@ So that I can study ICM-adjusted preflop decisions with the model's assumptions 
 - Acceptance Criteria: AC-036
 - Notes: Explicitly AFTER cash multiway (stakeholder "cash multiway first"). Requires payout structure + all stacks (EDGE-017); chip-EV replaced by ICM utility. Delivered as Tier 2 chart or Tier 3 estimate, never exact GTO. Model/coverage per Q-015.
 - Dependencies: US-032, US-033
+
+---
+
+## Epic E10 — Full-Hand Analysis (APPROVED 2026-06-28; roadmap, after the engine port)
+
+Extends the tool from preflop-spot study to analyzing complete played hands (postflop + hand-history import/replay). See PRD §23. Sequenced after the Rust→WASM engine port (postflop needs the stronger engine); import + replay can start earlier.
+
+### US-037: Continue a spot onto the flop/turn/river
+As a studier,
+I want to take a preflop spot and continue it onto a board (flop/turn/river),
+So that I can see the GTO strategy on later streets, not just preflop.
+
+- Priority: Should / Future
+- Linked: FEAT-030, REQ-034, FEAT-010 (board input)
+- Notes: HU only, single board, bounded tree + abstraction. Off-bound spots labeled/declined. Honest estimate/abstraction labeling. Depends on the new engine.
+
+### US-038: Import a hand history
+As a studier,
+I want to paste/upload a hand I played and have it parsed into a structured hand,
+So that I can analyze my actual decisions.
+
+- Priority: Should / Future
+- Linked: FEAT-031, REQ-031
+- Notes: Start with one common text format; validate strictly (cards/stacks/actions/board); clear errors on malformed input. Local-only (no upload to a server).
+
+### US-039: Replay an imported hand
+As a studier,
+I want to step through an imported hand action-by-action and street-by-street,
+So that I can see the table state, pot, and context at each decision.
+
+- Priority: Should / Future
+- Linked: FEAT-032, REQ-032
+- Notes: No solver dependency — a good standalone slice deliverable before postflop analysis.
+
+### US-040: Get per-decision GTO analysis on a replayed hand
+As a studier,
+I want each of my decisions in a replayed hand compared to the solver's recommendation,
+So that I can see where I deviated and by how much.
+
+- Priority: Should / Future
+- Linked: FEAT-033, REQ-033
+- Notes: Preflop uses the existing solver/charts; postflop uses FEAT-030. Honest trust tier per spot; multiway streets analyzed as labeled estimates (or preflop-only). Depends on US-037/US-038/US-039.

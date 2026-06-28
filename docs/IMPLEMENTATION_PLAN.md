@@ -87,6 +87,20 @@ This is the sequencing and delivery plan. It is framed around **critical path an
 
 ---
 
+### M5 — Full-Hand Analysis (APPROVED 2026-06-28; AFTER the Rust→WASM engine port)
+
+- **Goal:** extend from preflop-spot study to analyzing complete played hands (PRD §23, Epic E10): (a) **postflop continuation** of a spot onto flop/turn/river (HU, bounded), and (b) **hand-history import + replay + per-decision analysis**.
+- **Dependency:** sequenced after the **engine port** (postflop needs the stronger/faster Rust engine). Import + replay (US-038/039) have no solver dependency and can land first as a standalone slice.
+- **Suggested order:** hand-history import (FEAT-031) → replayer (FEAT-032) → preflop per-decision analysis on replayed hands (FEAT-033 preflop, reuses the existing solver/charts) → postflop continuation (FEAT-030) → postflop per-decision analysis (FEAT-033 postflop).
+- **EXIT CRITERIA:**
+  - Import one common hand-history format → canonical hand model, with strict validation + clear errors (REQ-031).
+  - Step through a hand street-by-street with correct pot/stack/board state (REQ-032).
+  - Each hero decision shows the solver's strategy + a labeled comparison to the action taken (REQ-033), honest trust tier per spot.
+  - Postflop solves obey a documented tractability bound; off-bound spots labeled/declined, never silently wrong (REQ-034).
+- **Risks:** RISK-019 (postflop feasibility), RISK-020 (HH format fragility), RISK-021 (scope growth) — deliver in thin slices.
+
+---
+
 ## 3. Quality-gate & approval-gate mapping onto milestones
 
 | Milestone | Hard gates that must be green | Approval / formal gate |

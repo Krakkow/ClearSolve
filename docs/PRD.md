@@ -538,3 +538,44 @@ The stakeholder APPROVED expanding the product into a general, configurable PREF
 ---
 
 > REMINDER: The 2026-06-24 personal-use answers (Section 21) were coordinator-relayed. The 2026-06-25 scope-expansion decisions (Section 22, including Option 1 and cash-first) are recorded as APPROVED by the stakeholder. Remaining product input needed: the initial multiway chart coverage list (Q-011) and the supporting discretization questions (Q-012–Q-015).
+
+---
+
+## 23. Full-Hand Analysis Epic (APPROVED 2026-06-28; roadmap — sequenced AFTER the Rust engine port)
+
+The stakeholder approved extending the tool from *preflop-spot study* toward analyzing **complete played hands** across all streets. Two flavors, both in scope ("Do C"):
+
+### 23.1 New features
+
+| ID | Feature | Priority | Description |
+|----|---------|----------|-------------|
+| FEAT-030 | **Postflop continuation** | Should | From a configured/solved preflop spot, continue onto a **flop / turn / river** (board input) and get the GTO strategy at each street. HU-only, single board, bounded bet-tree + abstraction (builds on FEAT-008/010). |
+| FEAT-031 | **Hand-history import** | Should | Paste / upload a hand history (start with one common format, e.g. PokerStars-style text) and parse it into a structured hand (seats, stacks, blinds, hole cards, actions per street, board). |
+| FEAT-032 | **Hand replayer** | Should | Step through an imported hand action-by-action and street-by-street; show the table state, pot, and ranges at each decision. |
+| FEAT-033 | **Per-decision analysis** | Should | At each hero decision in the replayed hand, show the solver's recommended action/frequencies and flag deviations (the "where did I go wrong" view). Preflop uses the existing solver/charts; postflop uses FEAT-030. |
+
+### 23.2 Requirements (summary)
+
+- REQ-031: Parse a hand history into the canonical hand model (validate cards/stacks/actions; reject malformed input with a clear error).
+- REQ-032: Replay any imported or constructed hand street-by-street with correct pot/stack/board state.
+- REQ-033: For each hero decision, surface the solver's strategy and a labeled comparison to the action taken (honest trust tier per the spot, per Section 5A).
+- REQ-034: Postflop solves obey a documented tractability bound (HU, single board, limited streets/sizes); off-bound spots are labeled/declined, never silently wrong.
+
+### 23.3 Scope & honesty
+
+- **In scope:** HU postflop continuation within bounds; hand-history import (one format first) + replay + per-decision preflop/postflop analysis; local-only (no upload to a server — pure client-side, NFR-006).
+- **Out of scope (still):** multiway postflop solving (RISK-001); exact-GTO multiway; supporting every hand-history format at once.
+- **Honesty:** postflop strategies carry the same estimate/abstraction labeling as preflop; multiway streets in an imported hand are analyzed as labeled estimates (or preflop-only) — never claimed exact.
+
+### 23.4 Sequencing & dependencies
+
+- **Sequenced AFTER the Rust→WASM engine port.** Credible postflop solving needs the stronger/faster engine (the current TS 2-player reduction is preflop-grade); this epic is gated on that.
+- Hand-history **import + replay (FEAT-031/032)** can start earlier (no solver dependency) and is a good standalone slice; **per-decision postflop analysis (FEAT-033 postflop)** depends on FEAT-030.
+
+### 23.5 New risks
+
+- RISK-019: In-browser postflop solve feasibility/accuracy (extends RISK-001) — bound + spike; lean on the new engine.
+- RISK-020: Hand-history format variety/parsing fragility — start with one format, validate strictly, expand incrementally.
+- RISK-021: Scope growth (full-hand analysis is a large surface) — deliver in thin slices (import+replay first; postflop analysis later).
+
+This is delivery milestone **M5** in IMPLEMENTATION_PLAN.md.

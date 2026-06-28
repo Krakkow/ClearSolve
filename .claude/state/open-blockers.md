@@ -6,69 +6,40 @@ This file tracks anything blocking planning, implementation, testing, review, re
 
 ## Current Blockers Summary
 
-| ID | Summary | Status | Owner | Priority | Created | Needed |
-|----|---------|--------|-------|----------|---------|--------|
-| BLK-001 | | Open | | | | |
+| ID | Summary | Status | Priority | Needed |
+|----|---------|--------|----------|--------|
+| BLK-001 | No git remote configured — cannot push | Open | Should | A repo URL (user does the push) |
+| BLK-002 | License undecided (TBD) | Open | Could | Owner picks a license |
+
+No blockers prevent active development; both are external/owner decisions.
 
 ---
 
-## Blocker Template
+## BLK-001: No git remote configured
 
-```markdown
-## BLK-000: <Blocker Title>
-
-Status: Open | In Progress | Resolved | Deferred
-Priority: Must | Should | Could
-Owner:
-Created:
-Related Workflow:
-Related Agent:
-Related Files:
+Status: Open
+Priority: Should
+Owner: User
 
 ### Description
-
-### Impact
+The repo has local commits on `main` but no remote, so changes cannot be pushed.
 
 ### Minimum Needed To Unblock
+`git remote add origin <url> && git push -u origin main` (the owner runs the push, or provides the URL).
 
 ### Suggested Default
-
-### Resolution
-
-### Notes
-```
+Create an empty GitHub repo and push `main`.
 
 ---
 
-## BLK-001: No Active Blockers
+## BLK-002: License undecided
 
-Status: Resolved
+Status: Open
 Priority: Could
-Owner: None
-Created:
-Related Workflow: Infrastructure Setup
-Related Agent: orchestrator
-Related Files:
+Owner: User
 
 ### Description
-
-Initial placeholder. Replace with real blockers when they appear.
-
-### Impact
-
-None.
+No license chosen (README marks it TBD). Personal use for now.
 
 ### Minimum Needed To Unblock
-
-None.
-
-### Suggested Default
-
-None.
-
-### Resolution
-
-No blocker exists.
-
-### Notes
-
+Owner selects a license (or leaves all-rights-reserved by default).

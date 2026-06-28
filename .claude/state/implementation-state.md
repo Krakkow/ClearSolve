@@ -6,61 +6,50 @@ This file tracks implementation progress across features, bugs, refactors, and t
 
 ## Implementation Summary
 
-Current Implementation Status: Not Started
-Current Feature:
-Current Task:
-Current Implementing Agent:
-Last Updated:
-
----
-
-## Task Tracking
-
-| Task ID | Title | Type | Status | Owner Agent | Dependencies | Validation | Notes |
-|---------|-------|------|--------|-------------|--------------|------------|-------|
-| TASK-001 | | Feature | Not Started | senior-fullstack-engineer | | | |
+Current Implementation Status: In progress
+Current Feature: Rust→WASM engine port
+Current Task: Port CFR+ core to Rust (equity + evaluator already ported)
+Current Implementing Agent: main (Claude) — direct implementation
+Last Updated: 2026-06-28
 
 ---
 
 ## Feature Implementation
 
-| Feature ID | Feature | Status | Tasks | Review Status | Test Status | Notes |
-|------------|---------|--------|-------|---------------|-------------|-------|
-| FEAT-001 | | Not Started | | | | |
+| Feature ID | Feature | Status | Test Status | Notes |
+|------------|---------|--------|-------------|-------|
+| FEAT-020/021 | Configurable preflop tool + action taxonomy | Done | green | TS engine, 2–9p cash |
+| — | Scenario builder + default ranges + range editor | Done | green | per-seat actions; entering-range subgame solve |
+| — | Position-calibrated multiway opens | Done | green | realization-edge by players-behind |
+| FEAT-019 | Predefined chart cache + live fallback | Partial | green | RFI solved-offline; vs-open/vs-3bet curated |
+| — | Offline generation pipeline (`gen:library`) | Done (RFI) | n/a | extending to response charts REJECTED (see decisions) |
+| — | Rust eval7 + equity (wasm) | Done | parity-validated | equity wired into worker |
+| — | Rust CFR+ core | Not started | — | NEXT |
+| FEAT-008 | Constrained HU postflop | Not started | — | full-hand-analysis epic |
+| — | Full-hand analysis (hand-history import/replay) | Planned | — | new epic |
 
 ---
 
-## Bug Fix Implementation
+## Changed Files Log (high level, recent)
 
-| Bug ID | Summary | Severity | Status | Root Cause Known | Fix Status | Regression Status |
-|--------|---------|----------|--------|------------------|------------|-------------------|
-| BUG-001 | | | Not Started | No | Not Started | Not Started |
-
----
-
-## Refactor Implementation
-
-| Refactor ID | Area | Status | Risk | Validation | Notes |
-|-------------|------|--------|------|------------|-------|
-| REF-001 | | Not Started | | | |
+| Date | Area | Summary |
+|------|------|---------|
+| 2026-06-26..28 | src/domain, src/engine, src/ui, src/app | scenario builder, multiway opens, range editor, charts (RFI/vs-open/vs-3bet), offline pipeline |
+| 2026-06-28 | engine/ (Rust) | evaluator.rs, equity.rs, rng.rs, lib.rs (eval7, build_equity_matrix) |
+| 2026-06-28 | src/wasm, src/engine/equityProvider, src/worker | wasm loader + injectable equity builder; worker uses Rust equity |
 
 ---
 
-## Changed Files Log
+## Validation Log (recent)
 
-| Date | Task ID | Files Changed | Summary | Agent |
-|------|---------|---------------|---------|-------|
-| | | | | |
-
----
-
-## Validation Log
-
-| Date | Task ID | Command / Method | Result | Notes |
-|------|---------|------------------|--------|-------|
-| | | | | |
+| Date | Method | Result |
+|------|--------|--------|
+| 2026-06-28 | scripts/evalParity.ts (200k hands) | Rust eval7 == TS, bit-identical |
+| 2026-06-28 | scripts/equityParity.ts | Rust equity == TS (max diff 0); 2.7x faster; AA vs KK 82.2% |
+| 2026-06-28 | npm run build + vitest | build clean; 94 tests pass |
 
 ---
 
 ## Implementation Notes
 
+Engine port strategy: port a piece to Rust, validate bit-parity vs the existing TS engine via a `scripts/*Parity.ts` script, then wire it in behind the `SolverEngine` port (injectable). Node/tests stay on the TS path; only the browser worker uses wasm.

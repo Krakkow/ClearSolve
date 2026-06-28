@@ -145,6 +145,76 @@ RISK-001/003/004/005/006/010/014 addressed in ARCHITECTURE Sec 19. Approval gate
 
 ### Follow-Up Actions
 
-- Stakeholder to sign off GATE-A/B/C.
+- Stakeholder to sign off GATE-A/B/C. (Approved 2026-06-24/25.)
 - M0 feasibility spike: validate in-browser CFR quality/time/memory + cache pipeline + Q-001 tractability bound.
 - Refine Q-010 predefined coverage list with stakeholder.
+
+---
+
+## DEC-003: Raw wasm32 cdylib (no wasm-bindgen) for the engine
+
+Date: 2026-06-28
+Status: Approved
+Decision Owner: Owner + main (Claude)
+Related Files: `engine/`, `src/wasm/`
+
+### Decision
+Build the Rust engine as a raw `wasm32-unknown-unknown` `cdylib` with `extern "C"` exports and manual linear-memory marshalling — NOT wasm-bindgen (a deviation from ADR-001).
+
+### Context
+wasm-bindgen's proc-macros require HOST compilation, which on this Windows machine needs the MSVC C++ Build Tools (multi-GB, not installed). A raw wasm32 cdylib uses Rust's bundled `rust-lld` and needs no MSVC.
+
+### Chosen Option
+Raw wasm32 cdylib. Data passed via `alloc_f64`/`free_f64` + `Float64Array` views — the performant path for a numeric solver anyway.
+
+### Reason
+Unblocks the engine port without a heavy toolchain install; marshalling overhead is irrelevant for bulk f64 buffers.
+
+### Risks
+Slightly more manual JS↔wasm glue. If wasm-bindgen ergonomics are later wanted, install MSVC build tools (or the GNU host toolchain) and revisit.
+
+### Supersedes
+The wasm-bindgen portion of ADR-001 (tooling only; Rust + CFR+ choices stand).
+
+---
+
+## DEC-004: Keep response charts CURATED — reject offline-solving them on the 2p model
+
+Date: 2026-06-27
+Status: Approved (finding)
+Decision Owner: Owner + main (Claude)
+Related Files: `src/domain/charts.ts`, README "Finding", `docs/DATA_MODEL.md §13.8`
+
+### Decision
+RFI charts are solver-generated (offline); vs-open and vs-3-bet stay hand-curated. Do NOT replace them with charts solved via the current 2-player-reduction engine.
+
+### Context
+Generating response charts via the 2p reduction produced structurally worse output than the curated reference: broken vs-3-bet pot geometry (opener "calls" ~61%), collapsed defender-position granularity, blind-vs-blind too tight, CO/BTN openers collapse.
+
+### Reason
+The curated reference charts are more accurate than the current model can produce; preferring the solved ones would regress quality.
+
+### Follow-Up Actions
+Revisit once a genuinely better engine (true multiway / postflop) exists.
+
+---
+
+## DEC-005: Add a full-hand-analysis epic (postflop + hand-history import) to scope
+
+Date: 2026-06-28
+Status: Approved
+Decision Owner: Owner
+Related Files: `docs/PRD.md` (full-hand-analysis epic), `docs/USER_STORIES.md`, `docs/IMPLEMENTATION_PLAN.md`
+
+### Decision
+Add a roadmap epic for full-hand analysis = (a) constrained postflop solving (continue a preflop spot onto flop/turn/river) AND (b) hand-history import + replay with per-decision GTO analysis.
+
+### Context
+Owner asked whether milestones include full-hand analysis; they did not. Owner chose to scope both flavors.
+
+### Reason
+Extends the tool from preflop-spot study toward analyzing complete played hands — a core GTO-trainer capability.
+
+### Risks
+Postflop in-browser feasibility (RISK-001); hand-history format parsing variety; scope growth. Sequenced AFTER the engine port (postflop needs the stronger engine).
+
