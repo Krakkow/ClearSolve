@@ -6,6 +6,15 @@
 
 use std::alloc::{alloc, dealloc, Layout};
 
+mod evaluator;
+
+/// Evaluate the best 5-card hand from 7 card ids (0..51). Returns the same packed
+/// score as the TS `evaluate7`, so Rust and TS agree bit-for-bit.
+#[no_mangle]
+pub extern "C" fn eval7(a: u32, b: u32, c: u32, d: u32, e: u32, f: u32, g: u32) -> i32 {
+    evaluator::evaluate7([a, b, c, d, e, f, g])
+}
+
 /// Minimal interop proof: a pure numeric export.
 #[no_mangle]
 pub extern "C" fn add(a: i32, b: i32) -> i32 {
