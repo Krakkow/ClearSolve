@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classStrength, skewByField } from './multiway';
+import { classStrength, skewByField, classPlayability, penalizeHeroRealization } from './multiway';
 import { buildEquityMatrix } from './equityMatrix';
 import { fullRange } from './range169';
 import { HAND_CLASSES } from './handClasses';
@@ -36,5 +36,31 @@ describe('multiway field model', () => {
     // Bigger field => even more concentration (trash:premium ratio shrinks further).
     const sk4 = skewByField(r, strength, 4, 4);
     expect(sk4[idx('72o')] / sk4[idx('AA')]).toBeLessThan(ratio);
+  });
+
+  it('classPlayability: pairs full; playable suited > weak suited; in [0,1]', () => {
+    const p = classPlayability();
+    for (const v of p) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+    expect(p[idx('AA')]).toBe(1);
+    expect(p[idx('22')]).toBe(1);
+    // connected/high suited realizes better than low disconnected suited.
+    expect(p[idx('T9s')]).toBeGreaterThan(p[idx('J2s')]);
+    expect(p[idx('87s')]).toBeGreaterThan(p[idx('84s')]);
+  });
+
+  it('penalizeHeroRealization shifts weak hero hands toward the SB, leaves premiums alone', () => {
+    const p = classPlayability();
+    const adj = penalizeHeroRealization(equity, p, 0.05);
+    const j2s = idx('J2s');
+    const aa = idx('AA');
+    // a weak BB hand (column j) gets a positive shift in SB equity for every SB row i...
+    expect(adj[0 * 169 + j2s]).toBeGreaterThan(equity[0 * 169 + j2s]);
+    // ...while a full-playability hand (pair) column is unchanged.
+    expect(adj[0 * 169 + aa]).toBeCloseTo(equity[0 * 169 + aa], 12);
+    // k=0 is a no-op (same reference).
+    expect(penalizeHeroRealization(equity, p, 0)).toBe(equity);
   });
 });

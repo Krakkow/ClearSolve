@@ -14,8 +14,60 @@
 // (the equity matrix is needed for the per-class strength), so it works for both engines.
 
 import { HAND_CLASSES } from './handClasses';
+import { rankIndex } from './cards';
 
 const N = 169;
+
+/**
+ * Per-class POSTFLOP REALIZATION quality in [0,1] — how much of its raw (all-in) equity a
+ * hand actually realizes when it just CALLS to see a flop, out of position, multiway. Made
+ * hands realize ~fully (pairs: set-mining + showdown value); speculative hands realize less
+ * the LOWER and more DISCONNECTED they are (weak suited like J2s/84s make dominated draws
+ * you can't get paid on and get bluffed off OOP). The see-flop terminal otherwise credits
+ * these their full equity, which is why multiway defense over-calls weak suited — this
+ * gives them a realization HAIRCUT. Static (no equity needed); a heuristic.
+ */
+export function classPlayability(): Float64Array {
+  const out = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const hc = HAND_CLASSES[i];
+    if (hc.kind === 'pair') {
+      out[i] = 1;
+      continue;
+    }
+    const hi = rankIndex(hc.high); // 0..12 (2..A)
+    const lo = rankIndex(hc.low);
+    const gap = hi - lo;
+    const highScore = (hi + lo) / 24; // 0 (32) .. ~0.96 (AK)
+    const connScore = Math.max(0, 1 - (gap - 1) / 11); // gap1 -> 1, gap12 -> 0
+    out[i] = Math.min(1, 0.55 * highScore + 0.45 * connScore);
+  }
+  return out;
+}
+
+/**
+ * Return a copy of the equity matrix with the BB-side (hero, column j) speculative hands
+ * given a see-flop realization HAIRCUT: each column j is shifted toward the SB by
+ * k*(1 - playability[j]). Only meaningful for RESPONDER (hero = BB) solves, applied per
+ * spot (so opens are untouched). Used together with the composite skew so multiway defense
+ * folds weak suited too — not just weak offsuit. `equity[i*N+j]` is SB equity (row i = SB).
+ */
+export function penalizeHeroRealization(
+  equity: Float64Array,
+  playability: Float64Array,
+  k: number,
+): Float64Array {
+  if (k <= 0) return equity;
+  const out = Float64Array.from(equity);
+  for (let j = 0; j < N; j++) {
+    const pen = k * (1 - playability[j]);
+    if (pen <= 0) continue;
+    for (let i = 0; i < N; i++) {
+      out[i * N + j] = Math.min(1, equity[i * N + j] + pen);
+    }
+  }
+  return out;
+}
 
 /**
  * Per-class "strength" = the class's combo-weighted average all-in equity vs the full

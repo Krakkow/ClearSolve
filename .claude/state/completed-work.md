@@ -195,10 +195,10 @@ Related Decisions: DEC-008
 Fixed absurdly-wide multiway cold-call/defense (owner's screenshot: BB vs UTG-open + CO/BTN calls, 200bb showed Call 96.5% / Fold 1.7%). The 2-player composite collapse overstated hero equity (beat one, not N) and squeeze fold-equity. A scalar realization edge could NOT fix it (it flipped calls into light 3-bets). Fix: skew the composite opponent toward stronger hands ("best of N") as the field grows.
 
 ### What Changed
-`domain/multiway.ts`: `classStrength(equity)` (per-class combo-weighted equity vs the field) + `skewByField(weights, strength, fieldSize, exp)` (×strength^(exp·(fieldSize−1))). `projectSpot` exposes `compositeOppCount`. `preflopEngine` skews the composite when `compositeOppCount >= 2`, before the solve — so BOTH the TS and wasm backends get the skewed range (no engine/wasm change). Exponent = 4.0.
+`domain/multiway.ts`: (1) `classStrength` + `skewByField` — skew the composite toward "best of N" (folds weak OFFSUIT); (2) `classPlayability` + `penalizeHeroRealization` — a per-hand see-flop realization haircut for hero's speculative hands (folds weak SUITED, which the skew was too blunt to fix). `projectSpot` exposes `compositeOppCount`. `preflopEngine` applies both for responder multiway spots, before the solve, as range + equity-matrix transforms — so BOTH the TS and wasm backends get them (no engine/wasm change). Skew exp = 4.0; haircut k = 0.02·(fieldSize−1).
 
 ### Validation
-Screenshot spot now fold 34.6% / call 64.6% / 3bet 0.8%, folding exactly the trash (offsuit junk + weak suited gappers). Generalizes (2/3/4-way → fold ~37/35/40%). Heads-up unaffected (no skew). 3 new unit tests; build + 102 tests pass.
+Screenshot spot: fold 1.7%→~50%, with weak suited (J2s/T2s/84s/42s) AND weak offsuit folding while playable hands (T9s/87s/76s/65s/A5s/KTs/pairs) keep calling ~99–100%. Generalizes (2/3/4-way → fold ~45/50/60%). Heads-up + opens unaffected. 5 new unit tests; build + 104 tests pass.
 
 ### Follow-Up Work
 Per-position/stack exponent tuning if specific spots look off; eventually a real N-player model.

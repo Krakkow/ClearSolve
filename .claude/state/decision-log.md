@@ -294,11 +294,14 @@ Build the composite-strength skew. `domain/multiway.ts`: `classStrength(equity)`
 ### Why this works (where the scalar failed)
 A stronger composite simultaneously LOWERS hero's showdown equity (you face tougher hands) AND makes the composite continue MORE vs a 3-bet — so BOTH calling and squeezing the bottom become −EV, and it finally FOLDS (the scalar edge only made calling bad, so it squeezed instead). Verified on the screenshot spot: **fold 1.7%→34.6%, call 96.5%→64.6%, 3-bet→0.8%**, with the folds being exactly the trash (offsuit junk + weak suited gappers). Generalizes across field sizes (2/3/4-way → fold ~37/35/40%). Heads-up (compositeOppCount<=1) is unchanged; opens/RFI library unaffected (no composite).
 
+### Part 2 — suited over-realization (follow-up, same day)
+The skew fixed weak OFFSUIT but weak SUITED hands (J2s, 84s, …) still called ~100%: the see-flop terminal credits their full flush/straight equity, which they don't realize OOP multiway, and the skew is too blunt to fold them without over-tightening everything (verified: exp 6–7 folds weak suited but collapses overall defense to ~26% call). Added a per-hand PLAYABILITY HAIRCUT: `classPlayability()` (made hands ~1.0; speculative hands lower the lower/more-disconnected they are) and `penalizeHeroRealization(equity, play, k)` shifts hero's (BB column) weak hands' see-flop equity toward the SB by k·(1−playability). Applied in `preflopEngine` for responder multiway spots as a per-spot equity adjustment (no solver/wasm change), k = 0.02·(fieldSize−1). Result on the screenshot spot: weak suited (J2s/T2s/84s/42s…) → ~1% call while every playable hand (T9s/87s/76s/65s/A5s/KTs/pairs) stays ~99–100%; overall fold ~50%. Generalizes (2/3/4-way → fold ~45/50/60%).
+
 ### Risks
-Still a heuristic (the exponent is calibrated, not derived) and still labeled ESTIMATE. A single static exponent across all positions/depths; revisit if specific spots look off. Not a true N-player general-sum solve.
+Heuristics (skew exponent + haircut k are calibrated, not derived); still labeled ESTIMATE. The equity-matrix haircut also touches all-in terminals, but weak hands rarely reach them, so distortion is negligible. Static params across positions/depths; revisit if spots look off.
 
 ### Follow-Up Actions
-Tune the exponent per position/stack if needed; eventually a real N-player model. Consider a small unit/integration guard that multiway defense stays in a sane band.
+Tune per position/stack if needed; eventually a real N-player model.
 
 
 

@@ -15,15 +15,22 @@ import { solvePushFold } from '../domain/pushfold';
 import { getCfrSolver } from './cfrProvider';
 import { DEFAULT_SIZES } from '../domain/betTree';
 import { projectToBetTreeConfig } from '../domain/projectSpot';
-import { classStrength, skewByField } from '../domain/multiway';
+import { classStrength, skewByField, classPlayability, penalizeHeroRealization } from '../domain/multiway';
 import { toNodeStrategyV2, buildTrustInfo } from './resultV2';
 
 /**
  * Strength-skew exponent for the multiway composite opponent. Calibrated so a multiway BB
- * cold-call (open + callers, 200bb) folds the bottom ~35% of the range instead of ~0% —
+ * cold-call (open + callers, 200bb) folds the weak OFFSUIT instead of continuing ~all —
  * see domain/multiway.ts and DEC-008. Effective power = exponent * (fieldSize - 1).
  */
 const FIELD_SKEW_EXPONENT = 4.0;
+
+/**
+ * See-flop realization haircut per extra opponent for multiway DEFENSE (on top of the
+ * skew). Effective k = this * (fieldSize - 1); calibrated so weak SUITED hands fold in a
+ * 3-way pot while genuinely playable hands keep calling. See DEC-008.
+ */
+const FIELD_REALIZATION_PENALTY_PER_OPP = 0.02;
 import type {
   AnySolveResult,
   EngineInfo,
@@ -189,16 +196,27 @@ export class PreflopEngine implements SolverEngine {
       bbRangeWeights?: Float64Array;
       realizationEdge?: number;
     } = {};
+    const multiway = proj.compositeOppCount >= 2;
     if (proj.oppRangeWeights !== undefined) {
-      const oppRange =
-        proj.compositeOppCount >= 2
-          ? skewByField(proj.oppRangeWeights, classStrength(equity), proj.compositeOppCount, FIELD_SKEW_EXPONENT)
-          : proj.oppRangeWeights;
+      const oppRange = multiway
+        ? skewByField(proj.oppRangeWeights, classStrength(equity), proj.compositeOppCount, FIELD_SKEW_EXPONENT)
+        : proj.oppRangeWeights;
       if (proj.oppSide === 0) rangeOpts.sbRangeWeights = oppRange;
       else rangeOpts.bbRangeWeights = oppRange;
     }
     if (proj.realizationEdge !== undefined) rangeOpts.realizationEdge = proj.realizationEdge;
-    const result = await getCfrSolver()(proj.config, equity, settings.iterations, rangeOpts);
+
+    // Multiway DEFENSE (hero = BB responder) also over-realizes weak SUITED hands (the
+    // see-flop terminal credits their full flush/straight equity, which they don't get OOP
+    // multiway). Give those a per-hand realization haircut, scaled by the field size, so
+    // they fold too — not just the weak offsuit. Responder-only (penalty is on the BB col);
+    // opens are untouched.
+    let solveEquity = equity;
+    if (multiway && proj.heroSide === 'responder') {
+      const k = FIELD_REALIZATION_PENALTY_PER_OPP * (proj.compositeOppCount - 1);
+      solveEquity = penalizeHeroRealization(equity, classPlayability(), k);
+    }
+    const result = await getCfrSolver()(proj.config, solveEquity, settings.iterations, rangeOpts);
     onProgress({ phase: 'solving', fraction: 1, iterations: result.iterations });
     onProgress({ phase: 'computing-exploitability', fraction: 1 });
 
