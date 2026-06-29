@@ -69,6 +69,30 @@ describe('predefined RFI charts (E4)', () => {
     expect(openFreq).toBeLessThan(0.62);
   });
 
+  it('serves a SOLVED 200bb RFI chart; early-position opens tighten vs 100bb', () => {
+    const s = foldToHero(6, 'BTN', 200);
+    const chart = lookupChart(s);
+    expect(chart).not.toBeNull();
+    expect(chart!.caption).toContain('200bb');
+    expect(chart!.caption.toLowerCase()).toContain('solved offline');
+    // Deep-stack effect: a 9-max UTG opens TIGHTER at 200bb than at 100bb (more reverse
+    // implied odds OOP deep). Measure TOTAL open width (1 - fold), since the open splits
+    // across min-raise + jam.
+    const totalOpen = (sp: SpotConfigV2) => {
+      const c = lookupChart(sp)!;
+      return 1 - (c.heroNode.nodeActionFreq.fold ?? 0);
+    };
+    const utg100 = totalOpen(foldToHero(9, 'UTG', 100));
+    const utg200 = totalOpen(foldToHero(9, 'UTG', 200));
+    expect(utg200).toBeLessThan(utg100);
+  });
+
+  it('200bb response spots fall through to live (curated vs-open/vs-3bet are 100bb-only)', () => {
+    const vs = vsOpen(6, 'BB', 'BTN');
+    vs.effectiveStackBb = 200;
+    expect(lookupChart(vs)).toBeNull();
+  });
+
   it('serves a blind-defense chart (BB/SB vs a single open) with fold/call/3-bet', () => {
     // 6-max: folds to BTN, BTN opens 2.5, hero BB.
     const s = foldToHero(6, 'BB');

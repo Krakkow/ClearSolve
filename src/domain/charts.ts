@@ -3,9 +3,11 @@
 // anything off-grid. These are CURATED REFERENCE ranges (standard ~100bb charts), NOT
 // solved by this engine — results are labeled "Predefined chart (reference)".
 //
-// v1 coverage: cash, ~100bb effective, RFI (raise-first-in / fold-to-hero) for every
-// opening position, 6-max AND 9-max. Off-grid (other depths, facing action, custom
-// ranges/overrides) falls through to the live path.
+// Coverage: cash RFI (raise-first-in / fold-to-hero) for every opening position, 6-max
+// AND 9-max, SOLVED OFFLINE at two depth tiers — ~100bb and ~200bb. The curated vs-open
+// and vs-3-bet reference charts are 100bb-only, so those spots at the 200bb tier live-
+// solve at the correct depth. Off-grid (other depths, facing action, custom ranges)
+// falls through to the live path.
 
 import { parseRange } from './range169';
 import { seatLayout } from './seatLayout';
@@ -56,9 +58,15 @@ export interface ChartResult {
   key: string;
 }
 
-/** ~100bb chart bucket — only serve a 100bb chart when the stack is close to it. */
-function is100bbBucket(stackBb: number): boolean {
-  return stackBb >= 75 && stackBb <= 150;
+/**
+ * Map an effective stack to the nearest charted depth tier, or null if too far from any.
+ * 100bb tier covers ~75–150bb; 200bb tier covers ~150–300bb. Outside that → live solve.
+ */
+export type ChartDepth = 100 | 200;
+function chartDepthTier(stackBb: number): ChartDepth | null {
+  if (stackBb >= 75 && stackBb <= 150) return 100;
+  if (stackBb > 150 && stackBb <= 300) return 200;
+  return null;
 }
 
 /** True if the scenario is "folds to hero" (pure RFI): no live action before hero. */
@@ -309,23 +317,27 @@ function nodeFromGenEntry(e: GenEntry, heroSeatIndex: number): NodeStrategyV2 {
   };
 }
 
-/** Solved-offline RFI chart (preferred over the hand-curated one when present). */
-function generatedRfi(spot: SpotConfigV2): ChartResult | null {
-  const key = `cash|${spot.tableSize}|${spot.heroPosition}|100bb|rfi`;
+/** Solved-offline RFI chart for the given depth tier (preferred over the curated one). */
+function generatedRfi(spot: SpotConfigV2, depth: ChartDepth): ChartResult | null {
+  const key = `cash|${spot.tableSize}|${spot.heroPosition}|${depth}bb|rfi`;
   const e = GEN_ENTRIES[key];
   if (!e) return null;
   return {
     heroNode: nodeFromGenEntry(e, seatIndexOfPos(spot, spot.heroPosition)),
-    caption: `Predefined chart (solved offline, ${rfiLibrary.meta.iterations} iters) — ${spot.heroPosition} RFI, ~100bb ${spot.tableSize}-handed cash. Reproducible engine solve of the 2-player model; an estimate, not a guaranteed equilibrium.`,
+    caption: `Predefined chart (solved offline, ${rfiLibrary.meta.iterations} iters) — ${spot.heroPosition} RFI, ~${depth}bb ${spot.tableSize}-handed cash. Reproducible engine solve of the 2-player model; an estimate, not a guaranteed equilibrium.`,
     key,
   };
 }
 
-/** RFI chart lookup (folds to hero, hero opens). Prefers the solved library, else curated. */
-function rfiChart(spot: SpotConfigV2): ChartResult | null {
+/**
+ * RFI chart lookup (folds to hero, hero opens). Prefers the solved library at the depth
+ * tier; the curated fallback is a 100bb chart, so only use it at the 100bb tier.
+ */
+function rfiChart(spot: SpotConfigV2, depth: ChartDepth): ChartResult | null {
   if (!isFoldToHero(spot)) return null;
-  const gen = generatedRfi(spot);
+  const gen = generatedRfi(spot, depth);
   if (gen) return gen;
+  if (depth !== 100) return null; // no curated 200bb chart -> fall through to live solve
   const rangeStr = rfiTable(spot.tableSize)?.[spot.heroPosition];
   if (!rangeStr) return null; // e.g. BB has no RFI
   return {
@@ -435,9 +447,16 @@ function vs3betChart(spot: SpotConfigV2): ChartResult | null {
  */
 export function lookupChart(spot: SpotConfigV2): ChartResult | null {
   if (spot.gameMode !== 'cash') return null;
-  if (!is100bbBucket(spot.effectiveStackBb)) return null;
+  const depth = chartDepthTier(spot.effectiveStackBb);
+  if (depth === null) return null;
   if (spot.betContext.priorActions.some((a) => a.range)) return null; // custom range -> live
-  return rfiChart(spot) ?? defenseChart(spot) ?? vs3betChart(spot);
+  // RFI is solved at both depth tiers. The curated vs-open / vs-3-bet charts are 100bb
+  // reference ranges, so at 200bb we let those spots live-solve at the correct depth
+  // (more honest than a 100bb chart used deep) — the depth-aware edge handles them.
+  const rfi = rfiChart(spot, depth);
+  if (rfi) return rfi;
+  if (depth !== 100) return null;
+  return defenseChart(spot) ?? vs3betChart(spot);
 }
 
 /** Wrap a served chart as a full SolveResultV2 (source = 'predefined'). */
