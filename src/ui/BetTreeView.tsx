@@ -2,7 +2,7 @@
 // node summary + per-hand side panel. Consumes the generalized SolveResultV2.
 
 import { useMemo, useState } from 'react';
-import { useStore } from '../app/store';
+import { useStore, QUALITY_PRESETS } from '../app/store';
 import { HAND_CLASSES } from '../domain/handClasses';
 import { prettyLabel } from '../domain/actionLabels';
 import { NodeNavigator } from './NodeNavigator';
@@ -15,6 +15,7 @@ import './BetTreeView.css';
 export function BetTreeView({ result }: Readonly<{ result: SolveResultV2 }>) {
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const selectNode = useStore((s) => s.selectNode);
+  const resultQuality = useStore((s) => s.resultQuality);
   const [hoverClass, setHoverClass] = useState<number | null>(null);
 
   // All inspectable nodes = hero node + downstream subtree, ordered by raiseDepth.
@@ -63,6 +64,13 @@ export function BetTreeView({ result }: Readonly<{ result: SolveResultV2 }>) {
           )}
           {result.ev?.heroBb != null && (
             <Metric label="Hero EV" value={`${result.ev.heroBb.toFixed(3)} bb`} />
+          )}
+          {resultQuality && (
+            <Metric
+              label="Quality"
+              value={QUALITY_PRESETS[resultQuality].label}
+              title={`Solve quality preset: ${QUALITY_PRESETS[resultQuality].iterations} CFR+ iterations, ${QUALITY_PRESETS[resultQuality].equitySamples} equity samples (${QUALITY_PRESETS[resultQuality].blurb}).`}
+            />
           )}
           <Metric label="Iterations" value={String(result.iterations)} />
           <Metric label="Solve time" value={`${Math.round(result.solveTimeMs)} ms`} />

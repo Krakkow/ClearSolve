@@ -208,6 +208,8 @@ interface AppState {
 
   /** Solve effort for live (non-cached) spots. */
   quality: SolveQuality;
+  /** The quality that produced the CURRENT result, or null if served from a chart. */
+  resultQuality: SolveQuality | null;
 
   status: 'idle' | 'solving' | 'done' | 'error';
   progress: SolveProgress | null;
@@ -283,6 +285,7 @@ export const useStore = create<AppState>((set, get) => ({
   heroMode: 'respond',
   threeBettor: 'BB',
   quality: 'balanced',
+  resultQuality: null,
 
   status: 'idle',
   progress: null,
@@ -353,7 +356,13 @@ export const useStore = create<AppState>((set, get) => ({
       const chart = lookupChart(spot);
       if (chart) {
         const result = chartToResult(spot, chart);
-        set({ status: 'done', result, progress: null, selectedNodeId: result.heroNode.nodeId });
+        set({
+          status: 'done',
+          result,
+          progress: null,
+          selectedNodeId: result.heroNode.nodeId,
+          resultQuality: null,
+        });
         return;
       }
 
@@ -368,7 +377,13 @@ export const useStore = create<AppState>((set, get) => ({
         (p) => set({ progress: p }),
       );
       if (result.mode !== 'preflop-spot') throw new Error('unexpected result mode');
-      set({ status: 'done', result, progress: null, selectedNodeId: result.heroNode.nodeId });
+      set({
+        status: 'done',
+        result,
+        progress: null,
+        selectedNodeId: result.heroNode.nodeId,
+        resultQuality: quality,
+      });
     } catch (err) {
       set({ status: 'error', error: err instanceof Error ? err.message : String(err) });
     }
