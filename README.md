@@ -4,7 +4,7 @@
 
 [![Status](https://img.shields.io/badge/status-working%20preflop%20solver%20%C2%B7%20active%20dev-brightgreen)](#roadmap)
 [![Type](https://img.shields.io/badge/type-client--side%20SPA%20%C2%B7%20no%20backend-informational)](docs/ARCHITECTURE.md)
-[![Engine](https://img.shields.io/badge/engine-TS%20CFR%2B%20%2B%20Rust%2FWASM%20equity-orange)](docs/TECH_DECISIONS.md)
+[![Engine](https://img.shields.io/badge/engine-Rust%2FWASM%20CFR%2B%20%2B%20equity-orange)](docs/TECH_DECISIONS.md)
 [![Tests](https://img.shields.io/badge/tests-94%20passing-success)](#testing)
 [![License](https://img.shields.io/badge/license-TBD-lightgrey)](#license)
 
@@ -27,13 +27,13 @@ There is a **real, runnable app**. You can configure a preflop spot, author the 
 - **Offline generation pipeline** — `npm run gen:library` runs the solver on the desktop (shared equity matrix, high CFR iterations — no browser limits) and writes a committed JSON library the app loads. This is how RFI charts become *solved* (with proper mixing) rather than hand-curated; it's the path to broader solved coverage.
 - **First-class, honest trust labeling** — see below.
 
-**What is *not* built yet (intentionally):** the full Rust→WASM engine (the **CFR core** — equity is already ported), broader chart coverage (more depths), local persistence, practice/drill mode, postflop solving, and full-hand analysis (hand-history import). These remain on the roadmap.
+**What is *not* built yet (intentionally):** multi-threaded WASM (the engine is fully ported but still single-threaded), broader chart coverage (more depths), local persistence, practice/drill mode, postflop solving, and full-hand analysis (hand-history import). These remain on the roadmap.
 
 ---
 
 ## How it works (honest summary)
 
-- **Engine: a real CFR+ solver, now hybrid TS + Rust/WASM.** The solver runs in a **Web Worker**, off the main thread, behind a clean `SolverEngine` port. It uses a 169-class hand abstraction, a fast 7-card evaluator, and a seeded Monte-Carlo all-in equity matrix (deterministic: same input → same output). The **equity build runs in Rust/WASM**; the **CFR+ traversal is still TypeScript**, being ported next — all behind the same port, **without UI changes**.
+- **Engine: a real CFR+ solver, now fully Rust/WASM.** The solver runs in a **Web Worker**, off the main thread, behind a clean `SolverEngine` port. It uses a 169-class hand abstraction, a fast 7-card evaluator, and a seeded Monte-Carlo all-in equity matrix (deterministic: same input → same output). **Both the equity build *and* the CFR+ traversal run in Rust/WASM** (bit-identical to the original TypeScript, ~2.7× faster equity / ~3.7× faster solve), with an automatic TS fallback if the wasm fails to load — all behind the same port, **without UI changes**.
 - **Multiway is reduced to a 2-effective-player game.** A 2–9-handed table is collapsed to *hero vs one composite opponent* (the live opponents' ranges combined), with dead money and pot odds modeled correctly. This keeps heads-up-resolved spots genuinely trustworthy and multiway spots a clearly-labeled estimate.
 - **Trust is a first-class output, and the tier is honest:**
   - **1 live opponent** (heads-up, or folds-to-one-raiser) → **"LIVE SOLVE"** with an exploitability *estimate*.
@@ -66,7 +66,7 @@ In the app: pick the **game type, table size, hero position, and stack**, set **
 
 | Layer | Current | Planned |
 |-------|---------|---------|
-| Solver engine | **Hybrid:** equity build in **Rust→WASM** (raw `wasm32` cdylib, no wasm-bindgen) + **TypeScript CFR+**, both in a Web Worker behind the `SolverEngine` port | Port the **CFR+ core to Rust** too; then multi-threaded wasm |
+| Solver engine | **Full Rust→WASM** (raw `wasm32` cdylib, no wasm-bindgen): equity build *and* CFR+ solve, both in a Web Worker behind the `SolverEngine` port, with a TS fallback | Multi-threaded wasm (SharedArrayBuffer) |
 | Algorithm | CFR+ with regret-matching+ over the preflop bet tree; seeded Monte-Carlo equity (Rust eval7 + equity matrix, bit-identical to TS) | CFR+/DCFR, multi-threaded (SharedArrayBuffer), vanilla CFR oracle |
 | Frontend | **React + TypeScript + Vite**, **Zustand** state | (same) |
 | Hosting | Static build (`dist/`) | **Cloudflare Pages**/Netlify with COOP/COEP |
@@ -95,7 +95,7 @@ docs/        design docs (PRD, ARCHITECTURE, DATA_MODEL, ...) — see map below
 ## Honest limitations
 
 - **Preflop only.** No postflop solving.
-- **Engine is being ported to Rust→WASM, incrementally.** The **equity build** (the heavy step) now runs in **Rust/WASM** in the worker (bit-identical to the old TS path, ~2.7× faster); the **CFR core is still TypeScript**. Each port is validated against the TS engine before it's wired in.
+- **Engine is now fully ported to Rust→WASM.** Both the **equity build** (~2.7× faster) and the **CFR+ solve** (~3.7× faster) run in **Rust/WASM** in the worker, bit-identical to the old TS path (validated to < 1e-9 max diff before wiring in). A TS fallback runs automatically if the wasm fails to load, and node tests/scripts stay on the TS path via injectable providers. Next step: multi-threaded wasm.
 - **Multiway is a labeled estimate**, not true multiway GTO (3+ player games are general-sum — no single equilibrium). Reference-grade multiway needs precomputed charts (future work). Heads-up-resolved spots are the trustworthy ones.
 - **Opponent ranges are heuristic defaults** (editable). Multiway opens are *position-calibrated estimates*, not chart-exact.
 - **Only RFI is solver-generated; vs-open / vs-3-bet stay curated.** Solving the response spots offline via the current 2-player reduction was evaluated and **rejected** (see [finding](#finding-solver-generated-response-charts-need-a-better-engine)) — it produced *less* accurate output than the curated reference charts.

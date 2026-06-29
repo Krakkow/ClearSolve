@@ -4,11 +4,11 @@
 
 Workflow ID: WF-ENGINE-PORT
 Workflow Type: Build Feature (engine port)
-Status: In progress
-Current Phase: IMPLEMENTATION
+Status: Complete (single-threaded engine port)
+Current Phase: DONE
 Current Agent: main (Claude), direct implementation
 Started: 2026-06-28
-Last Updated: 2026-06-28
+Last Updated: 2026-06-29
 
 ---
 
@@ -18,7 +18,7 @@ Original User Request: Build the Rust→WASM engine (the foundational unlock for
 
 Goal: Replace the TS solver with a Rust/WASM engine incrementally, validating each piece against the TS engine.
 
-Scope: evaluator (done) → equity (done, wired) → CFR+ core (next) → multi-threaded wasm (later).
+Scope: evaluator (done) → equity (done, wired) → CFR+ core (done, wired) → multi-threaded wasm (later, separate workflow).
 
 Out of Scope (this workflow): postflop solver, hand-history import (separate epic — now planned).
 
@@ -29,16 +29,18 @@ Out of Scope (this workflow): postflop solver, hand-history import (separate epi
 | Phase | Status | Notes |
 |-------|--------|-------|
 | DISCOVERY | Complete | toolchain check, ADR-001 revisit (raw wasm) |
-| IMPLEMENTATION | In progress | evaluator + equity done; CFR+ next |
-| TEST/VALIDATION | Ongoing | parity scripts per piece |
-| DOCUMENTATION | In progress | README + state files updated 2026-06-28 |
+| IMPLEMENTATION | Complete | evaluator + equity + CFR+ all done & wired |
+| TEST/VALIDATION | Complete | parity scripts per piece (all diff 0); 96 tests green |
+| DOCUMENTATION | Complete | README + state files updated 2026-06-29 |
 
 ---
 
 ## Current Next Step
 
-Next: Port the CFR+ core (betTree + preflopCfr) to Rust with bit-parity vs TS, then expose a `solve_*` wasm entry and route the worker through it.
-Gate Before Moving On: parity-validate the CFR output vs the TS engine before wiring it in.
+Engine port complete (single-threaded, fully Rust/WASM with TS fallback). Two candidate next workflows:
+1. Multi-threaded wasm (SharedArrayBuffer) — the next performance unlock (COOP/COEP headers already set).
+2. M5 full-hand analysis epic (postflop continuation + hand-history import/replay) — already spec'd in PRD §23 / Epic E10.
+Gate Before Moving On: confirm direction with the user.
 
 ---
 

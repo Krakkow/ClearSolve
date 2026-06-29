@@ -21,6 +21,7 @@ Do not delete completed history unless intentionally archiving.
 | DONE-009 | Infrastructure | Rust→WASM toolchain + scaffold + interop proof | 2026-06-28 | raw wasm32 |
 | DONE-010 | Feature | Rust eval7 + equity (bit-identical, 2.7x faster); wired into worker | 2026-06-28 | |
 | DONE-011 | Docs | README + `.claude/state/` brought current; full-hand-analysis epic spec'd | 2026-06-28 | |
+| DONE-012 | Feature | Rust CFR+ core (bit-identical, 3.7x faster); worker fully Rust/WASM | 2026-06-29 | |
 
 ---
 
@@ -65,3 +66,25 @@ Ported the 7-card evaluator and the Monte-Carlo equity matrix to Rust, bit-ident
 
 ### Follow-Up Work
 Port the CFR+ core to Rust; then multi-threaded wasm.
+
+---
+
+## DONE-012: Rust CFR+ core (full engine port)
+
+Type: Feature
+Completed Date: 2026-06-29
+Workflow: Engine port
+Related Files: `engine/src/cfr.rs`, `engine/src/lib.rs`, `src/wasm/wasmEngine.ts`, `src/engine/cfrProvider.ts`, `src/engine/preflopEngine.ts`, `src/worker/solver.worker.ts`, `scripts/cfrParity.ts`, `scripts/cfrBench.ts`
+Related Decisions: DEC-003
+
+### Summary
+Ported the full CFR+ core (bet-tree builder, regret-matching+ traversal, terminal-EV model, best-response, exploitability) to Rust, bit-identical to TS; wired the live solve through it (injectable `cfrProvider`, worker prefers wasm with TS fallback). The engine is now fully Rust/WASM end-to-end.
+
+### What Changed
+`solve_preflop_tree` wasm export marshalling config/equity/ranges over linear memory; `buildPreflopTreeWasm` parses the flat result buffer back into `NodeStrategy[]`; `cfrProvider` injectable solver; `solveBetTreeMode`/`solvePreflopSpotMode` now async via `getCfrSolver()`; worker `setCfrSolver(wasm → TS fallback)`.
+
+### Validation
+`scripts/cfrParity.ts` — full-range, range-weighted (vs CO open), and 10bb cases all max diff 0.00e+0 (< 1e-9). `scripts/cfrBench.ts` — 40.2s → 10.8s @1500 iters (3.74x). Build + 96 tests green.
+
+### Follow-Up Work
+Multi-threaded wasm (SharedArrayBuffer); then the full-hand-analysis epic (M5).

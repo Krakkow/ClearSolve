@@ -38,18 +38,18 @@ Real fix requires a better engine (true multiway / postflop). Tracked as the eng
 
 ---
 
-## TD-002: Hybrid engine (Rust equity + TS CFR)
+## TD-002: Hybrid engine (Rust equity + TS CFR) — RESOLVED
 
-Status: In progress
+Status: Resolved (2026-06-29)
 Area: Engine
 Severity: Medium
 Priority: Should
 
 ### Description
-Equity is Rust/WASM (fast); the CFR+ traversal, best-response, exploitability, and terminal-EV model are still TypeScript.
+Equity was Rust/WASM (fast) while the CFR+ traversal, best-response, exploitability, and terminal-EV model were still TypeScript.
 
-### Recommendation
-Port the CFR+ core to Rust (bit-parity vs TS), then enable multi-threaded wasm. This is the current active task.
+### Resolution
+Ported the full CFR+ core to Rust (`engine/src/cfr.rs`), bit-identical to TS (parity diff 0.00e+0), and wired the live solve through it via the injectable `cfrProvider` (worker prefers wasm, TS fallback). 3.74x faster solve. See DONE-012. Remaining engine work: multi-threaded wasm (separate item).
 
 ---
 

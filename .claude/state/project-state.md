@@ -5,10 +5,10 @@
 Project Name: ClearSolve (working name; not final)
 Project Description: Pure client-side (no backend) browser-native NLHE GTO **preflop** solver SPA, personal-use.
 Current Phase: Implementation (active development)
-Current Milestone: Rust→WASM engine port (equity done; CFR+ core next)
-Current Workflow: Engine port — incremental TS→Rust with parity validation
-Overall Status: On track — working app, 94 tests passing, build clean
-Last Updated: 2026-06-28
+Current Milestone: Rust→WASM engine port — COMPLETE (equity + CFR+ core, single-threaded). Next: multi-threaded wasm or M5 full-hand analysis.
+Current Workflow: Engine port — incremental TS→Rust with parity validation (done)
+Overall Status: On track — working app, fully Rust/WASM engine, 96 tests passing, build clean
+Last Updated: 2026-06-29
 
 ---
 
@@ -64,7 +64,7 @@ Rust toolchain (rustup 1.96 + wasm32 target + wasm-pack 0.13) for the `engine/` 
 | — | Position-calibrated multiway opens | Built | realization-edge model |
 | FEAT-019 | Predefined chart cache + live fallback | Partial | RFI solved-offline; vs-open/vs-3bet curated |
 | — | Offline generation pipeline (`gen:library`) | Built | RFI only |
-| — | Rust→WASM: evaluator + equity | Built | equity wired into worker |
+| — | Rust→WASM: evaluator + equity + CFR+ | Built | full solve wired into worker (TS fallback) |
 | FEAT-026 | Tournament / ICM | Not built | UI stub "coming soon" |
 | FEAT-008 | Constrained HU postflop solving | Not built | part of full-hand-analysis epic |
 | — | Full-hand analysis (hand-history import + replay + postflop) | Planned | new epic, see PRD |
@@ -78,14 +78,14 @@ Rust toolchain (rustup 1.96 + wasm32 target + wasm-pack 0.13) for the `engine/` 
 |----|------|-------|------------|--------|
 | RISK-001 | In-browser postflop feasibility | High | constrained bound + spike; mostly deferred | Open |
 | RISK-N1 | Multiway not exact GTO (general-sum) | High | 2-eff-player estimate, honest labels, curated charts | Mitigated/labeled |
-| TD-002 | CFR still TS while equity is Rust (hybrid) | Med | port CFR next; parity-validated | In progress |
+| TD-002 | CFR still TS while equity is Rust (hybrid) | Med | port CFR — DONE (parity diff 0, 3.7x faster) | Resolved |
 
 ---
 
 ## Key Architecture Summary
 
 ### Current Architecture
-Layered client-side SPA: UI (React/Zustand) → Web Worker (SolverEngine port) → engine (TS CFR+ + Rust/WASM equity) → domain core. Multiway reduced to a 2-effective-player game. See docs/ARCHITECTURE.md, docs/DATA_MODEL.md §13.
+Layered client-side SPA: UI (React/Zustand) → Web Worker (SolverEngine port) → engine (Rust/WASM CFR+ + equity, TS fallback) → domain core. Multiway reduced to a 2-effective-player game. See docs/ARCHITECTURE.md, docs/DATA_MODEL.md §13.
 
 ### Important Constraints
 No backend; static hosting; honesty (never claim "exact GTO"); deterministic (seeded).
