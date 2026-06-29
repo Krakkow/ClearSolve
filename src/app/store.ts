@@ -36,6 +36,38 @@ export const DEFAULT_SETTINGS: SolveSettings = {
   equitySamples: 600,
 };
 
+/** How hard the solver works on a live (non-cached) spot. */
+export type SolveQuality = 'fast' | 'balanced' | 'max';
+
+/**
+ * Quality presets. These DON'T add hands — every solve already covers all 169 starting
+ * hands. They set how precise this spot's answer is: `iterations` (CFR+ passes → closer
+ * to equilibrium) and `equitySamples` (Monte-Carlo board runouts → less equity noise).
+ */
+export const QUALITY_PRESETS: Record<
+  SolveQuality,
+  { label: string; blurb: string; iterations: number; equitySamples: number }
+> = {
+  fast: {
+    label: 'Fast',
+    blurb: 'near-instant, slightly rougher frequencies',
+    iterations: 600,
+    equitySamples: 300,
+  },
+  balanced: {
+    label: 'Balanced',
+    blurb: 'good accuracy in a few seconds (default)',
+    iterations: 1500,
+    equitySamples: 600,
+  },
+  max: {
+    label: 'Max',
+    blurb: 'closest to equilibrium, slowest',
+    iterations: 4000,
+    equitySamples: 1500,
+  },
+};
+
 /** A user-authored action for a single seat acting before the hero. */
 export interface SeatActionInput {
   kind: PriorActionKind;
@@ -174,6 +206,9 @@ interface AppState {
   heroMode: HeroMode;
   threeBettor: SeatPosition;
 
+  /** Solve effort for live (non-cached) spots. */
+  quality: SolveQuality;
+
   status: 'idle' | 'solving' | 'done' | 'error';
   progress: SolveProgress | null;
   result: SolveResultV2 | null;
@@ -190,6 +225,7 @@ interface AppState {
   resetScenario: () => void;
   setHeroMode: (m: HeroMode) => void;
   setThreeBettor: (p: SeatPosition) => void;
+  setQuality: (q: SolveQuality) => void;
   selectNode: (id: number) => void;
   solve: () => Promise<void>;
 }
@@ -246,6 +282,7 @@ export const useStore = create<AppState>((set, get) => ({
   seatActions: {},
   heroMode: 'respond',
   threeBettor: 'BB',
+  quality: 'balanced',
 
   status: 'idle',
   progress: null,
@@ -296,10 +333,12 @@ export const useStore = create<AppState>((set, get) => ({
   resetScenario: () => set({ seatActions: {} }),
   setHeroMode: (m) => set({ heroMode: m }),
   setThreeBettor: (p) => set({ threeBettor: p }),
+  setQuality: (q) => set({ quality: q }),
   selectNode: (id) => set({ selectedNodeId: id }),
 
   solve: async () => {
-    const { gameMode, tableSize, heroPosition, stackBb, seatActions, heroMode, threeBettor } = get();
+    const { gameMode, tableSize, heroPosition, stackBb, seatActions, heroMode, threeBettor, quality } =
+      get();
     try {
       seatIndexOf(tableSize, heroPosition);
     } catch (e) {
@@ -318,8 +357,14 @@ export const useStore = create<AppState>((set, get) => ({
         return;
       }
 
+      const preset = QUALITY_PRESETS[quality];
+      const settings: SolveSettings = {
+        ...DEFAULT_SETTINGS,
+        iterations: preset.iterations,
+        equitySamples: preset.equitySamples,
+      };
       const result: AnySolveResult = await engine.solve(
-        { mode: 'preflop-spot', spot, settings: DEFAULT_SETTINGS },
+        { mode: 'preflop-spot', spot, settings },
         (p) => set({ progress: p }),
       );
       if (result.mode !== 'preflop-spot') throw new Error('unexpected result mode');

@@ -4,7 +4,15 @@
 // decision node and the opponents' (default) entering ranges follow from the scenario.
 
 import { useState } from 'react';
-import { useStore, scenarioSeats, buildSpot, positionsAfterHero, type ScenarioSeat } from '../app/store';
+import {
+  useStore,
+  scenarioSeats,
+  buildSpot,
+  positionsAfterHero,
+  QUALITY_PRESETS,
+  type ScenarioSeat,
+  type SolveQuality,
+} from '../app/store';
 import { validPositions } from '../domain/seatLayout';
 import { defaultRangeForSeat } from '../domain/projectSpot';
 import { RangeEditor } from './RangeEditor';
@@ -146,6 +154,8 @@ export function SpotConfig() {
   const setHeroMode = useStore((s) => s.setHeroMode);
   const threeBettor = useStore((s) => s.threeBettor);
   const setThreeBettor = useStore((s) => s.setThreeBettor);
+  const quality = useStore((s) => s.quality);
+  const setQuality = useStore((s) => s.setQuality);
   const solve = useStore((s) => s.solve);
   const status = useStore((s) => s.status);
   const solving = status === 'solving';
@@ -328,6 +338,41 @@ export function SpotConfig() {
           )}
         </div>
       )}
+
+      <div className="field quality-field">
+        <label htmlFor="quality">
+          <span>Solve quality</span>{' '}
+          <button
+            type="button"
+            className="info-badge"
+            aria-label="About solve quality"
+            title={
+              'How hard the solver works on this spot.\n\n' +
+              `Fast — ${QUALITY_PRESETS.fast.blurb}\n` +
+              `Balanced — ${QUALITY_PRESETS.balanced.blurb}\n` +
+              `Max — ${QUALITY_PRESETS.max.blurb}\n\n` +
+              'It does NOT add more hands — every solve already covers all 169 starting ' +
+              "hands at once. It only sets how precise this spot's answer is: more " +
+              'iterations get closer to equilibrium, more equity samples reduce noise. ' +
+              'Predefined chart spots load instantly and ignore this.'
+            }
+          >
+            ⓘ
+          </button>
+        </label>
+        <select
+          id="quality"
+          value={quality}
+          disabled={solving}
+          onChange={(e) => setQuality(e.target.value as SolveQuality)}
+        >
+          {(Object.keys(QUALITY_PRESETS) as SolveQuality[]).map((q) => (
+            <option key={q} value={q}>
+              {QUALITY_PRESETS[q].label} — {QUALITY_PRESETS[q].blurb}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <button
         className="solve-btn"
