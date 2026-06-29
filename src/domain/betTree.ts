@@ -46,6 +46,18 @@ export const DEFAULT_SIZES = {
   fourBetTo: 24,
 } as const;
 
+/**
+ * Max effective stack (bb) at which OPEN-JAMMING is offered as a distinct action at the
+ * root. Open-shoving is part of GTO only when short (push/fold territory); deep, nobody
+ * open-jams, so offering it there is a pure bet-abstraction artifact (the see-flop
+ * terminal undervalues the small-open line, so the solver leaks frequency into a jam that
+ * real GTO never makes). Above this depth the open node is just Fold / Open. Note the
+ * deeper jam lines (3-bet/4-bet) are already only reachable via the short-stack clamp, so
+ * this single gate removes the whole deep over-jam. 5-bet jam (the committed, low-SPR
+ * node) is unaffected. Short-stack jam behavior (<=20bb) and push/fold parity are kept.
+ */
+export const OPEN_JAM_MAX_BB = 20;
+
 export interface Action {
   kind: ActionKind;
   label: string; // UI label, e.g. "Open 2.5", "3-Bet 11", "All-in", "Call", "Fold"
@@ -235,8 +247,9 @@ export function buildBetTree(config: BetTreeConfig): BetTree {
     const open = raiseOrAllin(config.openTo, bigBlind, `Open ${config.openTo}`);
     node.actions.push(open);
     node.children.push(bbVsOpen([open.contribTo, bigBlind], open.contribTo));
-    // ALL-IN: SB jams.
-    if (open.kind !== 'allin') {
+    // ALL-IN (open-jam): only a real action when short. Deep, this is an abstraction
+    // artifact (real GTO never open-jams 100bb), so omit it — see OPEN_JAM_MAX_BB.
+    if (open.kind !== 'allin' && stack <= OPEN_JAM_MAX_BB) {
       node.actions.push({ kind: 'allin', label: 'All-in', contribTo: stack });
       node.children.push(bbVsOpen([stack, bigBlind], stack));
     }

@@ -8,6 +8,11 @@ const N: usize = 169;
 #[allow(dead_code)] // the default lives in TS for now; JS passes the resolved edge
 pub const DEFAULT_REALIZATION_EDGE: f64 = 0.085;
 
+// Max effective stack (bb) at which OPEN-JAMMING is offered at the root. Mirrors
+// OPEN_JAM_MAX_BB in betTree.ts: open-shoving is GTO only when short; deep it is a pure
+// bet-abstraction artifact, so the open node is just Fold / Open above this depth.
+const OPEN_JAM_MAX_BB: f64 = 20.0;
+
 #[derive(Clone, Copy)]
 pub struct Config {
     pub small_blind: f64,
@@ -205,10 +210,9 @@ fn build_tree(cfg: &Config) -> Tree {
         open,
     ];
     let mut children = vec![fold_t, open_child];
-    // ALL-IN (only if open wasn't already all-in)
-    let open_is_allin = b.nodes[open_child].terminal; // not used; check the action kind instead
-    let _ = open_is_allin;
-    if actions[1].kind != AKind::Allin {
+    // ALL-IN (open-jam): only a real action when short; deep it is an abstraction artifact
+    // (real GTO never open-jams 100bb), so omit it. Mirrors betTree.ts / OPEN_JAM_MAX_BB.
+    if actions[1].kind != AKind::Allin && stack <= OPEN_JAM_MAX_BB {
         let allin_child = bb_vs_open(&mut b, [stack, cfg.big_blind], stack, cfg);
         actions.push(Action { kind: AKind::Allin, contrib_to: stack });
         children.push(allin_child);

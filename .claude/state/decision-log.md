@@ -242,3 +242,25 @@ The depth edge is an explicit HEURISTIC, not a depth-resolved solve. The open-si
 ### Follow-Up Actions
 Fix the open node to offer a realistic non-jam raise size (kills the over-jam artifact). Consider more depth tiers (50bb, 300bb) and solved deep response charts once the engine supports them.
 
+---
+
+## DEC-007: Gate open-jamming to short stacks (fix the deep open-jam artifact)
+
+Date: 2026-06-29
+Status: Approved
+Decision Owner: Owner
+Related Files: `src/domain/betTree.ts`, `engine/src/cfr.rs`, `src/wasm/clearsolve_engine.wasm`, `src/engine/preflopSpot.test.ts`, `src/domain/generated/rfiLibrary.json`
+
+### Decision
+Offer the explicit open-jam (all-in) action at the root SB-Open node ONLY when the effective stack ≤ 20bb (`OPEN_JAM_MAX_BB`). Above that, the open node is Fold / Open. Applied identically in the TS bet tree AND the Rust/WASM port (the generator and the app both run the wasm, so both had to change).
+
+### Context
+The bet abstraction offered only min-raise-to-2.5 or all-in as the "open." The see-flop terminal undervalues the small-open line (no postflop play modeled), so the solver leaked frequency into an open-JAM that real GTO never makes deep — e.g. 100bb 9-max UTG showed ~13.5% open-shove. Total open WIDTH was right; the min-raise/jam split was not. Owner asked to fix it (flagged as the biggest available realism win).
+
+### Reason
+Deep, open-jamming is ~0% of GTO, so removing the action loses nothing real and eliminates the artifact; short-stacked (push/fold), open-jamming IS strategy, so it is kept ≤20bb. The deeper jam lines (3-bet/4-bet) were already only reachable via the short-stack clamp, so this single root gate removes the whole deep over-jam. 5-bet jam (committed, low-SPR) is unaffected. Confirmed: total open frequencies unchanged (the jam frequency moved to the open-raise); short-stack jam behavior + push/fold parity preserved; TS↔Rust parity still 0.00e+0.
+
+### Risks
+A hard 20bb cutoff is a small discontinuity (defensible: it's the standard open-shove boundary). The model still lacks a non-jam LARGE open size (a separate follow-up). Required rebuilding + recommitting the wasm and regenerating the library (100bb per-hand splits changed: jam→raise).
+
+

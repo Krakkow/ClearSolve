@@ -76,13 +76,16 @@ describe('preflop-spot E1 engine', () => {
     }
   });
 
-  it('RFI hero node uses open/3bet-style labels via labelFor (depth 0 -> raise/shove)', async () => {
-    const res = await solveSpot(spot({ tableSize: 6, heroPosition: 'BTN' }));
-    expect(res.heroNode.raiseDepth).toBe(0);
-    // labels should include 'fold', 'raise' (open), and 'shove' (open jam).
-    expect(res.heroNode.actionLabels).toContain('fold');
-    expect(res.heroNode.actionLabels).toContain('raise');
-    expect(res.heroNode.actionLabels).toContain('shove');
+  it('RFI hero node labels: deep = fold/raise (no open-jam); short adds shove', async () => {
+    const deep = await solveSpot(spot({ tableSize: 6, heroPosition: 'BTN', effectiveStackBb: 100 }));
+    expect(deep.heroNode.raiseDepth).toBe(0);
+    expect(deep.heroNode.actionLabels).toContain('fold');
+    expect(deep.heroNode.actionLabels).toContain('raise'); // open
+    // Deep: open-jamming is removed as a bet-abstraction artifact -> no shove here.
+    expect(deep.heroNode.actionLabels).not.toContain('shove');
+    // Short: open-jam is a genuine action and renders via labelFor (depth 0) as 'shove'.
+    const short = await solveSpot(spot({ tableSize: 6, heroPosition: 'BTN', effectiveStackBb: 12 }));
+    expect(short.heroNode.actionLabels).toContain('shove');
   });
 
   it('upgradeHuSpot path == direct HU bet-tree (same SB open strategy)', async () => {

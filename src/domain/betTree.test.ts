@@ -19,14 +19,22 @@ function walk(node: TreeNode, visit: (n: DecisionNode) => void) {
 }
 
 describe('bet tree structure', () => {
-  it('root is SB Open with Fold / Open / All-in at 100bb', () => {
+  it('root is SB Open with Fold / Open (no open-jam) at 100bb', () => {
     const tree = buildBetTree(cfg(100));
     expect(tree.root.label).toBe('SB Open');
     expect(tree.root.toAct).toBe(0);
     const labels = tree.root.actions.map((a) => a.label);
     expect(labels).toContain('Fold');
     expect(labels.some((l) => l.startsWith('Open'))).toBe(true);
-    expect(labels).toContain('All-in');
+    // Deep: open-jamming is gated off as a bet-abstraction artifact (OPEN_JAM_MAX_BB).
+    expect(labels).not.toContain('All-in');
+  });
+
+  it('offers an open-jam (All-in) at short stacks (<=20bb)', () => {
+    const labels = buildBetTree(cfg(15)).root.actions.map((a) => a.label);
+    expect(labels).toContain('Fold');
+    expect(labels.some((l) => l.startsWith('Open'))).toBe(true); // open-raise still distinct
+    expect(labels).toContain('All-in'); // ...plus the open-jam option
   });
 
   it('every action has a parallel child', () => {
