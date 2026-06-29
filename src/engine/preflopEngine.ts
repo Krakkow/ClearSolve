@@ -12,7 +12,7 @@
 
 import { getEquityBuilder } from './equityProvider';
 import { solvePushFold } from '../domain/pushfold';
-import { solvePreflopTree } from '../domain/preflopCfr';
+import { getCfrSolver } from './cfrProvider';
 import { DEFAULT_SIZES } from '../domain/betTree';
 import { projectToBetTreeConfig } from '../domain/projectSpot';
 import { toNodeStrategyV2, buildTrustInfo } from './resultV2';
@@ -107,16 +107,16 @@ export class PreflopEngine implements SolverEngine {
     };
   }
 
-  private solveBetTreeMode(
+  private async solveBetTreeMode(
     spot: PreflopTreeSolveResult['spot'],
     settings: PreflopTreeSolveResult['settings'],
     equity: Float64Array,
     start: number,
     onProgress: (p: SolveProgress) => void,
-  ): PreflopTreeSolveResult {
+  ): Promise<PreflopTreeSolveResult> {
     onProgress({ phase: 'solving', fraction: 0 });
     const sizes = spot.sizes ?? DEFAULT_SIZES;
-    const result = solvePreflopTree(
+    const result = await getCfrSolver()(
       {
         smallBlind: spot.smallBlindBb,
         bigBlind: spot.bigBlindBb,
@@ -160,13 +160,13 @@ export class PreflopEngine implements SolverEngine {
    * BetTreeConfig (DATA_MODEL 13.9), running the SAME CFR+ core, then emitting a
    * SolveResultV2 with first-class trust labeling.
    */
-  private solvePreflopSpotMode(
+  private async solvePreflopSpotMode(
     spot: SpotConfigV2,
     settings: SolveSettings,
     equity: Float64Array,
     start: number,
     onProgress: (p: SolveProgress) => void,
-  ): SolveResultV2 {
+  ): Promise<SolveResultV2> {
     onProgress({ phase: 'building-tree', fraction: 1 });
     const proj = projectToBetTreeConfig(spot);
 
@@ -183,7 +183,7 @@ export class PreflopEngine implements SolverEngine {
       else rangeOpts.bbRangeWeights = proj.oppRangeWeights;
     }
     if (proj.realizationEdge !== undefined) rangeOpts.realizationEdge = proj.realizationEdge;
-    const result = solvePreflopTree(proj.config, equity, settings.iterations, rangeOpts);
+    const result = await getCfrSolver()(proj.config, equity, settings.iterations, rangeOpts);
     onProgress({ phase: 'solving', fraction: 1, iterations: result.iterations });
     onProgress({ phase: 'computing-exploitability', fraction: 1 });
 

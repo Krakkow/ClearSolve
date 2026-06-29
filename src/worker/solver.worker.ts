@@ -4,22 +4,32 @@
 
 import { PreflopEngine } from '../engine/preflopEngine';
 import { setEquityBuilder } from '../engine/equityProvider';
+import { setCfrSolver } from '../engine/cfrProvider';
 import { buildEquityMatrix } from '../domain/equityMatrix';
-import { buildEquityMatrixWasm } from '../wasm/wasmEngine';
+import { solvePreflopTree } from '../domain/preflopCfr';
+import { buildEquityMatrixWasm, buildPreflopTreeWasm } from '../wasm/wasmEngine';
 import {
   PROTOCOL_VERSION,
   type WorkerMessage,
   type WorkerRequest,
 } from './protocol';
 
-// Prefer the Rust/WASM equity build (bit-identical to TS, faster); fall back to the TS
-// build if the wasm fails to load for any reason. Keeps the heavy step robust.
+// Prefer the Rust/WASM engine (bit-identical to TS, faster) for both the equity build
+// and the CFR+ solve; fall back to the TS path if the wasm fails to load.
 setEquityBuilder(async (samples, seed, onProgress) => {
   try {
     return await buildEquityMatrixWasm(samples, seed, onProgress);
   } catch (e) {
     console.warn('[worker] wasm equity unavailable, using TS build:', e);
     return buildEquityMatrix(samples, seed, onProgress);
+  }
+});
+setCfrSolver(async (config, equity, iterations, options) => {
+  try {
+    return await buildPreflopTreeWasm(config, equity, iterations, options);
+  } catch (e) {
+    console.warn('[worker] wasm CFR unavailable, using TS solve:', e);
+    return solvePreflopTree(config, equity, iterations, options);
   }
 });
 
