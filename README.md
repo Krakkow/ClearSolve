@@ -126,11 +126,9 @@ Coverage includes: 7-card evaluator cross-validation, known equities (AA vs KK �
 
 ## Roadmap
 
-**Done:** HU push/fold solver · HU preflop bet-tree CFR+ · generalized 2–9-handed preflop tool · full action taxonomy · scenario builder · default ranges + inline range editor · correct cold-call pot odds · position-calibrated multiway opens · honest trust labeling · **predefined chart cache (RFI + vs-open defense + vs-3-bet, 6-max & 9-max, ~100bb) with live fallback**.
+**Done:** HU push/fold solver · HU preflop bet-tree CFR+ · generalized 2–9-handed preflop tool · full action taxonomy · scenario builder · default ranges + inline range editor · correct cold-call pot odds · position-calibrated multiway opens · honest trust labeling · **predefined chart cache (RFI solved-offline at ~100bb *and* ~200bb + vs-open defense + vs-3-bet, 6-max & 9-max) with live fallback** · **full Rust→WASM engine** (equity + CFR+, bit-identical, ~2.7×/3.7× faster) · **solve-quality selector (Fast/Balanced/Max)** · **depth-aware realization edge**.
 
-**In progress:** **Rust→WASM engine** (foundational unlock for faster solving + generation, and the prerequisite for trustworthy solved multiway charts). Done so far: toolchain + raw-wasm32 scaffold; **7-card evaluator** ported (bit-identical, 200k-hand parity); **equity matrix** ported (bit-identical, 2.7× faster) and **wired into the worker** so the app uses it. Next: port the CFR+ core, then multi-threaded wasm. Build the wasm with `npm run wasm:build` (needs the Rust toolchain); the prebuilt wasm is committed so the app builds without Rust.
-
-**Next (candidates):** more stack-depth buckets for the (solved-RFI / curated-response) library · 4-bet pots · **full-hand analysis** (postflop continuation + hand-history import/replay — Epic E10 / PRD §23, after the engine port) · tournament/ICM · local persistence (save/load) · practice/drill mode · true multiway via the new engine.
+**Next (candidates):** realistic open-sizing (the coarse min-raise/jam abstraction over-jams some opens — fix the open node to use a true non-jam raise) · more stack-depth buckets · 4-bet pots · multi-threaded wasm · **full-hand analysis** (postflop continuation + hand-history import/replay — Epic E10 / PRD §23) · tournament/ICM · local persistence (save/load) · practice/drill mode · true multiway via the engine. Build the wasm with `npm run wasm:build` (needs the Rust toolchain); the prebuilt wasm is committed so the app builds without Rust.
 
 Original milestone planning lives in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 

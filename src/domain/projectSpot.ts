@@ -86,6 +86,31 @@ export function openRealizationEdge(behind: number): number {
   return table[behind] ?? -0.15;
 }
 
+/**
+ * Depth-aware realization bonus (magnitude). The see-flop terminal credits a fixed equity
+ * edge for how well hero realizes equity postflop; deeper stacks mean more streets and
+ * bigger implied odds, so playable hands realize MORE the deeper you go. Modeled as a
+ * modest bonus that is ZERO at/below 100bb (so the 100bb tier is unchanged) and grows,
+ * capped, with depth. Counteracts the high-SPR suppression that otherwise over-tightens
+ * deep ranges. For OPENS this is scaled by position (see openDepthPositionFactor), since
+ * deep stacks help late/in-position seats most. A heuristic for the live/offline estimate.
+ */
+export function depthRealizationBonus(stackBb: number): number {
+  const over = Math.max(0, stackBb - 100) / 100; // 0 at 100bb, 1.0 at 200bb, 2.0 at 300bb
+  return Math.min(0.05, over * 0.03); // +0.03 at 200bb, capped at +0.05 (very deep)
+}
+
+/**
+ * How much of the depth bonus an OPEN gets, by position (proxied by players behind).
+ * Deep stacks reward late/in-position opens most (implied odds, realize more postflop),
+ * and barely help early-position opens (dominated OOP, more 3-bets). So: full bonus on
+ * the button (behind=1), tapering to a small floor for early seats (UTG). This makes deep
+ * ranges widen in late position while staying ~flat early — instead of widening uniformly.
+ */
+export function openDepthPositionFactor(behind: number): number {
+  return Math.min(1, Math.max(0.4, 1 - (behind - 1) * 0.13));
+}
+
 
 /**
  * Total dead money (in bb) contributed by ANTES across all live seats, plus a
@@ -365,9 +390,17 @@ export function projectToBetTreeConfig(spot: SpotConfigV2): Projection {
   const liveOppCount = composite.inPotOpps + seatsBehind;
 
   // For an OPEN (hero is first-in aggressor), tighten with players behind via the
-  // realization edge. Facing-action spots keep the engine default.
-  const realizationEdge =
-    heroSide === 'aggressor' && depth === 0 ? openRealizationEdge(seatsBehind) : undefined;
+  // realization edge; for facing-action spots the engine default applies. Both get a
+  // depth bonus deep (zero at <=100bb), so deep spots realize a bit more (less over-tight).
+  const depthBonus = depthRealizationBonus(effectiveStackBb);
+  let realizationEdge: number | undefined;
+  if (heroSide === 'aggressor' && depth === 0) {
+    realizationEdge = openRealizationEdge(seatsBehind) + depthBonus * openDepthPositionFactor(seatsBehind);
+  } else if (depthBonus > 0) {
+    // Facing action: nudge the engine default (DEFAULT_REALIZATION_EDGE = 0.085) up with
+    // depth. At <=100bb leave undefined so the default is used unchanged (bit-identical).
+    realizationEdge = 0.085 + depthBonus;
+  }
 
   return {
     config,

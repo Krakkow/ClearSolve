@@ -218,3 +218,27 @@ Extends the tool from preflop-spot study toward analyzing complete played hands 
 ### Risks
 Postflop in-browser feasibility (RISK-001); hand-history format parsing variety; scope growth. Sequenced AFTER the engine port (postflop needs the stronger engine).
 
+---
+
+## DEC-006: Add a 200bb chart tier + a depth-aware realization edge
+
+Date: 2026-06-29
+Status: Approved
+Decision Owner: Owner
+Related Files: `scripts/genLibrary.ts`, `src/domain/charts.ts`, `src/domain/projectSpot.ts`, `src/domain/generated/rfiLibrary.json`
+
+### Decision
+(1) Solve the RFI library offline at TWO depth tiers — ~100bb and ~200bb — and serve each instantly (200bb cash is the owner's actual game; it previously fell back to a slow live solve). (2) Make the see-flop realization edge depth-aware: a modest equity bonus above 100bb, ZERO at ≤100bb, position-scaled for opens (full in late position, tapering to a floor early), so deep ranges widen in late position while staying ~flat early.
+
+### Context
+Owner plays 200bb-max cash; asked whether the solver is fitted to 100 or 200bb. It was 100bb-tuned: the whole library + the realization-edge model are calibrated there, and the preflop-equity terminal is structurally rougher deep. Owner asked to (1) add a 200bb library tier, then (2) make the edge depth-aware.
+
+### Reason
+RFI at both depths is the visible win (instant, solved). The position-scaled depth bonus captures the real deep-stack effect (late/IP widens via implied odds; early ~unchanged) that a uniform scalar cannot — a first flat +0.03 bonus over-widened every position (6-max UTG 17%→25%, BTN 52%→64%), so it was replaced by position scaling.
+
+### Risks
+The depth edge is an explicit HEURISTIC, not a depth-resolved solve. The open-sizing abstraction (min-raise or jam only) still over-jams some opens — total open width is right, the min-raise/jam split is not. Curated vs-open/vs-3-bet remain 100bb-only; at 200bb those spots live-solve (with the depth edge) rather than serve a mis-depthed chart.
+
+### Follow-Up Actions
+Fix the open node to offer a realistic non-jam raise size (kills the over-jam artifact). Consider more depth tiers (50bb, 300bb) and solved deep response charts once the engine supports them.
+
