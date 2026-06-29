@@ -28,6 +28,7 @@ Last Updated: 2026-06-29
 | — | Solve-quality selector (Fast/Balanced/Max) | Done | green | per-spot precision + hover help + result metric |
 | — | Depth-aware realization edge (position-scaled) | Done | green | DEC-006; deep widens late, ~flat early |
 | — | Realistic open-sizing (open-jam gated ≤20bb) | Done | green | DEC-007; TS+Rust, wasm rebuilt |
+| — | Multiway field model (composite "best of N" skew) | Done | green | DEC-008; fixes wide multiway defense |
 | FEAT-008 | Constrained HU postflop | Not started | — | full-hand-analysis epic |
 | — | Full-hand analysis (hand-history import/replay) | Planned | — | new epic |
 

@@ -26,6 +26,7 @@ Do not delete completed history unless intentionally archiving.
 | DONE-014 | Feature | 200bb predefined RFI tier (gen multi-depth; generator routed through Rust/WASM) | 2026-06-29 | |
 | DONE-015 | Feature | Depth-aware realization edge (position-scaled: late widens deep, early ~flat) | 2026-06-29 | DEC-006 |
 | DONE-016 | Feature | Open-jam gated to short stacks (≤20bb) in TS + Rust; fixes deep over-jam artifact | 2026-06-29 | DEC-007 |
+| DONE-017 | Feature | Multiway field model: composite skewed to "best of N"; fixes absurdly-wide multiway defense | 2026-06-29 | DEC-008 |
 
 ---
 
@@ -179,3 +180,25 @@ TS↔Rust CFR parity still 0.00e+0; short-stack jam + push/fold parity preserved
 
 ### Follow-Up Work
 Add a true non-jam LARGE open/3-bet size per node (mix sizings like a production solver).
+
+---
+
+## DONE-017: Multiway field model (composite "best of N" skew)
+
+Type: Feature (modeling fix)
+Completed Date: 2026-06-29
+Workflow: Engine modeling
+Related Files: `src/domain/multiway.ts`, `src/engine/preflopEngine.ts`, `src/domain/projectSpot.ts`, `src/domain/multiway.test.ts`, `README.md`
+Related Decisions: DEC-008
+
+### Summary
+Fixed absurdly-wide multiway cold-call/defense (owner's screenshot: BB vs UTG-open + CO/BTN calls, 200bb showed Call 96.5% / Fold 1.7%). The 2-player composite collapse overstated hero equity (beat one, not N) and squeeze fold-equity. A scalar realization edge could NOT fix it (it flipped calls into light 3-bets). Fix: skew the composite opponent toward stronger hands ("best of N") as the field grows.
+
+### What Changed
+`domain/multiway.ts`: `classStrength(equity)` (per-class combo-weighted equity vs the field) + `skewByField(weights, strength, fieldSize, exp)` (×strength^(exp·(fieldSize−1))). `projectSpot` exposes `compositeOppCount`. `preflopEngine` skews the composite when `compositeOppCount >= 2`, before the solve — so BOTH the TS and wasm backends get the skewed range (no engine/wasm change). Exponent = 4.0.
+
+### Validation
+Screenshot spot now fold 34.6% / call 64.6% / 3bet 0.8%, folding exactly the trash (offsuit junk + weak suited gappers). Generalizes (2/3/4-way → fold ~37/35/40%). Heads-up unaffected (no skew). 3 new unit tests; build + 102 tests pass.
+
+### Follow-Up Work
+Per-position/stack exponent tuning if specific spots look off; eventually a real N-player model.

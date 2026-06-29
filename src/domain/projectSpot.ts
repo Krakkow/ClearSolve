@@ -55,6 +55,12 @@ export interface Projection {
    * spot (trustworthy live solve vs an assumed range); >=2 => a multiway estimate.
    */
   liveOppCount: number;
+  /**
+   * Number of IN-POT opponents folded into the composite range (excludes players still to
+   * act behind hero). This is the "field size" for the multiway equity skew: how many
+   * separate hands hero must beat at showdown. 1 => heads-up vs one range (no skew).
+   */
+  compositeOppCount: number;
   /** whether the opponent range is an ASSUMED default range (vs a full-range field). */
   assumedRanges: boolean;
   /**
@@ -420,6 +426,7 @@ export function projectToBetTreeConfig(spot: SpotConfigV2): Projection {
     oppRangeWeights: composite.weights,
     oppSide,
     liveOppCount,
+    compositeOppCount: composite.inPotOpps,
     assumedRanges: composite.assumed,
     realizationEdge,
   };

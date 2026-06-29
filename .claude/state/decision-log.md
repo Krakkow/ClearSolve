@@ -268,15 +268,15 @@ A hard 20bb cutoff is a small discontinuity (defensible: it's the standard open-
 
 ---
 
-## DEC-008: Multiway cold-call defense runs too wide — a scalar realization edge cannot fix it
+## DEC-008: Fix multiway cold-call width by strengthening the composite ("best of N")
 
 Date: 2026-06-29
-Status: Approved (documented limitation; revert experiment)
+Status: Approved — IMPLEMENTED
 Decision Owner: Owner
-Related Files: `src/domain/projectSpot.ts`, `src/engine/resultV2.ts`
+Related Files: `src/domain/multiway.ts`, `src/engine/preflopEngine.ts`, `src/domain/projectSpot.ts`, `src/domain/multiway.test.ts`
 
 ### Decision
-Keep the RESPONDER realization edge at the engine default (drop the depth bonus there) and DO NOT attempt to fix multiway cold-call width with the realization-edge scalar. Treat over-wide multiway cold-call/defense ranges as a known limitation of the 2-effective-player model, gated on a real multiway model.
+Two parts. (1) Keep the RESPONDER realization edge at the engine default (the depth bonus was dropped there — a scalar edge cannot fix multiway and just flips calls into light squeezes). (2) Fix the width at its ROOT: skew the composite opponent's range toward STRONGER hands as the field grows — an approximation of the "best of N" opponents hero must actually beat. Owner chose to build the real multiway model.
 
 ### Context
 Owner reported a 9-max BB facing UTG-open + CO/BTN cold-calls, 200bb, showing **Call 96.5% / Fold 1.7%** — clearly too wide. The responder realization edge for that spot was +0.115 (0.085 default + the 200bb depth bonus), i.e. a positive REWARD for a 3-way OOP cold-call, which is backwards.
@@ -289,10 +289,16 @@ Owner reported a 9-max BB facing UTG-open + CO/BTN cold-calls, 200bb, showing **
 The 2-player reduction collapses N opponents to ONE composite, which (1) overstates hero equity (beat one composite hand ~33% vs. beating 3 separate hands) and (2) overstates squeeze fold-equity (one composite folds to 3-bets like a HU player). Both errors push toward "always continue," and the great immediate price means FOLD is dominated — so a negative edge just converts calls into light 3-bets, never folds. A single scalar cannot separate these.
 
 ### Chosen Option
-Revert to the default responder edge (no depth bonus); document the limitation honestly (the result is already badged ESTIMATE — "field collapsed to one composite opponent"). The fix is the real multiway model, sequenced with the broader multiway/postflop engine work.
+Build the composite-strength skew. `domain/multiway.ts`: `classStrength(equity)` = per-class combo-weighted equity vs the field; `skewByField(weights, strength, fieldSize, exp)` multiplies each composite weight by strength^(exp*(fieldSize-1)). Applied in `preflopEngine` when `compositeOppCount >= 2`, BEFORE the solve — so it works for BOTH the TS and wasm backends (no engine/wasm change). Exponent calibrated to 4.0.
+
+### Why this works (where the scalar failed)
+A stronger composite simultaneously LOWERS hero's showdown equity (you face tougher hands) AND makes the composite continue MORE vs a 3-bet — so BOTH calling and squeezing the bottom become −EV, and it finally FOLDS (the scalar edge only made calling bad, so it squeezed instead). Verified on the screenshot spot: **fold 1.7%→34.6%, call 96.5%→64.6%, 3-bet→0.8%**, with the folds being exactly the trash (offsuit junk + weak suited gappers). Generalizes across field sizes (2/3/4-way → fold ~37/35/40%). Heads-up (compositeOppCount<=1) is unchanged; opens/RFI library unaffected (no composite).
+
+### Risks
+Still a heuristic (the exponent is calibrated, not derived) and still labeled ESTIMATE. A single static exponent across all positions/depths; revisit if specific spots look off. Not a true N-player general-sum solve.
 
 ### Follow-Up Actions
-Build a multiway equity discount (approximate beating the field) + a squeeze-aware composite continue model; only then will multiway cold-call/defense ranges be trustworthy. Until then, keep the ESTIMATE labeling prominent.
+Tune the exponent per position/stack if needed; eventually a real N-player model. Consider a small unit/integration guard that multiway defense stays in a sane band.
 
 
 

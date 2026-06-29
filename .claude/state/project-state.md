@@ -68,6 +68,7 @@ Rust toolchain (rustup 1.96 + wasm32 target + wasm-pack 0.13) for the `engine/` 
 | — | Solve-quality selector (Fast/Balanced/Max) | Built | per-spot precision; cached charts ignore it |
 | — | Depth-aware realization edge (position-scaled) | Built | deep widens late, ~flat early; heuristic (DEC-006) |
 | — | Realistic open-sizing (open-jam gated ≤20bb) | Built | both engines; fixes deep over-jam (DEC-007) |
+| — | Multiway field model (composite "best of N" skew) | Built | fixes absurdly-wide multiway defense (DEC-008) |
 | FEAT-026 | Tournament / ICM | Not built | UI stub "coming soon" |
 | FEAT-008 | Constrained HU postflop solving | Not built | part of full-hand-analysis epic |
 | — | Full-hand analysis (hand-history import + replay + postflop) | Planned | new epic, see PRD |

@@ -15,7 +15,15 @@ import { solvePushFold } from '../domain/pushfold';
 import { getCfrSolver } from './cfrProvider';
 import { DEFAULT_SIZES } from '../domain/betTree';
 import { projectToBetTreeConfig } from '../domain/projectSpot';
+import { classStrength, skewByField } from '../domain/multiway';
 import { toNodeStrategyV2, buildTrustInfo } from './resultV2';
+
+/**
+ * Strength-skew exponent for the multiway composite opponent. Calibrated so a multiway BB
+ * cold-call (open + callers, 200bb) folds the bottom ~35% of the range instead of ~0% —
+ * see domain/multiway.ts and DEC-008. Effective power = exponent * (fieldSize - 1).
+ */
+const FIELD_SKEW_EXPONENT = 4.0;
 import type {
   AnySolveResult,
   EngineInfo,
@@ -173,14 +181,21 @@ export class PreflopEngine implements SolverEngine {
     onProgress({ phase: 'solving', fraction: 0 });
     // Feed the composite opponent's entering range into the correct tree side so the
     // solve is conditioned on the authored scenario (the ranges arriving at the node).
+    // For a MULTIWAY pot (>=2 in-pot opponents), skew that composite toward stronger hands
+    // — an approximation of the "best of N" hero must beat — so multiway cold-call/defense
+    // ranges fold the bottom instead of continuing ~everything (see domain/multiway.ts).
     const rangeOpts: {
       sbRangeWeights?: Float64Array;
       bbRangeWeights?: Float64Array;
       realizationEdge?: number;
     } = {};
     if (proj.oppRangeWeights !== undefined) {
-      if (proj.oppSide === 0) rangeOpts.sbRangeWeights = proj.oppRangeWeights;
-      else rangeOpts.bbRangeWeights = proj.oppRangeWeights;
+      const oppRange =
+        proj.compositeOppCount >= 2
+          ? skewByField(proj.oppRangeWeights, classStrength(equity), proj.compositeOppCount, FIELD_SKEW_EXPONENT)
+          : proj.oppRangeWeights;
+      if (proj.oppSide === 0) rangeOpts.sbRangeWeights = oppRange;
+      else rangeOpts.bbRangeWeights = oppRange;
     }
     if (proj.realizationEdge !== undefined) rangeOpts.realizationEdge = proj.realizationEdge;
     const result = await getCfrSolver()(proj.config, equity, settings.iterations, rangeOpts);
