@@ -32,15 +32,20 @@ export function classPlayability(): Float64Array {
   for (let i = 0; i < N; i++) {
     const hc = HAND_CLASSES[i];
     if (hc.kind === 'pair') {
-      out[i] = 1;
+      out[i] = 1; // pairs realize fully (set-mining + made showdown value)
       continue;
     }
     const hi = rankIndex(hc.high); // 0..12 (2..A)
     const lo = rankIndex(hc.low);
     const gap = hi - lo;
-    const highScore = (hi + lo) / 24; // 0 (32) .. ~0.96 (AK)
+    // "made" strength weights the LOW card (kicker) DOUBLE: a big card with a weak kicker
+    // (A2o, K4o) makes a DOMINATED top pair multiway, so it should NOT score like a real
+    // two-high-card hand. This is what folds weak offsuit aces/kings, not just low junk.
+    const made = (hi + 2 * lo) / 36; // 0 (32) .. ~0.94 (AK)
     const connScore = Math.max(0, 1 - (gap - 1) / 11); // gap1 -> 1, gap12 -> 0
-    out[i] = Math.min(1, 0.55 * highScore + 0.45 * connScore);
+    let p = 0.5 * made + 0.32 * connScore;
+    if (hc.kind === 'suited') p += 0.16; // flush potential realizes a bit
+    out[i] = Math.min(1, p);
   }
   return out;
 }

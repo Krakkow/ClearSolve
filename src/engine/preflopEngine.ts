@@ -30,7 +30,7 @@ const FIELD_SKEW_EXPONENT = 4.0;
  * skew). Effective k = this * (fieldSize - 1); calibrated so weak SUITED hands fold in a
  * 3-way pot while genuinely playable hands keep calling. See DEC-008.
  */
-const FIELD_REALIZATION_PENALTY_PER_OPP = 0.02;
+const FIELD_REALIZATION_PENALTY_PER_OPP = 0.03;
 import type {
   AnySolveResult,
   EngineInfo,
