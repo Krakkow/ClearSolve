@@ -242,6 +242,9 @@ The depth edge is an explicit HEURISTIC, not a depth-resolved solve. The open-si
 ### Follow-Up Actions
 Fix the open node to offer a realistic non-jam raise size (kills the over-jam artifact). Consider more depth tiers (50bb, 300bb) and solved deep response charts once the engine supports them.
 
+### Note (2026-06-29)
+The depth bonus was later removed from the RESPONDER path (kept for OPENS only) — see DEC-008. Deeper does not make a multiway/OOP cold-call realize better, and it was widening defense the wrong way.
+
 ---
 
 ## DEC-007: Gate open-jamming to short stacks (fix the deep open-jam artifact)
@@ -262,5 +265,34 @@ Deep, open-jamming is ~0% of GTO, so removing the action loses nothing real and 
 
 ### Risks
 A hard 20bb cutoff is a small discontinuity (defensible: it's the standard open-shove boundary). The model still lacks a non-jam LARGE open size (a separate follow-up). Required rebuilding + recommitting the wasm and regenerating the library (100bb per-hand splits changed: jam→raise).
+
+---
+
+## DEC-008: Multiway cold-call defense runs too wide — a scalar realization edge cannot fix it
+
+Date: 2026-06-29
+Status: Approved (documented limitation; revert experiment)
+Decision Owner: Owner
+Related Files: `src/domain/projectSpot.ts`, `src/engine/resultV2.ts`
+
+### Decision
+Keep the RESPONDER realization edge at the engine default (drop the depth bonus there) and DO NOT attempt to fix multiway cold-call width with the realization-edge scalar. Treat over-wide multiway cold-call/defense ranges as a known limitation of the 2-effective-player model, gated on a real multiway model.
+
+### Context
+Owner reported a 9-max BB facing UTG-open + CO/BTN cold-calls, 200bb, showing **Call 96.5% / Fold 1.7%** — clearly too wide. The responder realization edge for that spot was +0.115 (0.085 default + the 200bb depth bonus), i.e. a positive REWARD for a 3-way OOP cold-call, which is backwards.
+
+### Options Considered
+- **Negative multiway/position-aware responder edge** (tried): swept the edge from −0.05 to −0.60. Result: up to −0.25 it still calls ~94%; at −0.35 it does NOT start folding — it flips to **73% three-betting**; deeper edges → ~95% 3-bet. No value yields a sane fold-heavy range.
+- **Real multiway model** (not done): discount hero equity to "beat the field" AND raise the composite's continue-vs-3-bet frequency, so both calling and squeezing trash become −EV. Substantial engine change.
+
+### Reason (why the scalar fails)
+The 2-player reduction collapses N opponents to ONE composite, which (1) overstates hero equity (beat one composite hand ~33% vs. beating 3 separate hands) and (2) overstates squeeze fold-equity (one composite folds to 3-bets like a HU player). Both errors push toward "always continue," and the great immediate price means FOLD is dominated — so a negative edge just converts calls into light 3-bets, never folds. A single scalar cannot separate these.
+
+### Chosen Option
+Revert to the default responder edge (no depth bonus); document the limitation honestly (the result is already badged ESTIMATE — "field collapsed to one composite opponent"). The fix is the real multiway model, sequenced with the broader multiway/postflop engine work.
+
+### Follow-Up Actions
+Build a multiway equity discount (approximate beating the field) + a squeeze-aware composite continue model; only then will multiway cold-call/defense ranges be trustworthy. Until then, keep the ESTIMATE labeling prominent.
+
 
 

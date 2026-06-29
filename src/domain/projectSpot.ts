@@ -112,6 +112,7 @@ export function openDepthPositionFactor(behind: number): number {
 }
 
 
+
 /**
  * Total dead money (in bb) contributed by ANTES across all live seats, plus a
  * big-blind ante if configured. This is added to the pot regardless of the modeled
@@ -392,15 +393,19 @@ export function projectToBetTreeConfig(spot: SpotConfigV2): Projection {
   // For an OPEN (hero is first-in aggressor), tighten with players behind via the
   // realization edge; for facing-action spots the engine default applies. Both get a
   // depth bonus deep (zero at <=100bb), so deep spots realize a bit more (less over-tight).
+  // For an OPEN, tighten with players behind via a position- and depth-aware edge.
+  // RESPONDER spots (defend / cold-call / squeeze / vs-3-bet) use the engine default edge:
+  // the realization edge is a SCALAR and cannot model multiway defense — collapsing the
+  // field to one composite opponent overstates both hero's equity (beat one, not N) and
+  // squeeze fold-equity, so any negative edge flips the model into light 3-betting instead
+  // of folding (verified). Multiway cold-call ranges are therefore a known-wide ESTIMATE,
+  // gated on a real multiway model. The depth bonus is intentionally NOT applied here
+  // (deeper does not make a 3-way OOP cold-call realize better).
   const depthBonus = depthRealizationBonus(effectiveStackBb);
-  let realizationEdge: number | undefined;
-  if (heroSide === 'aggressor' && depth === 0) {
-    realizationEdge = openRealizationEdge(seatsBehind) + depthBonus * openDepthPositionFactor(seatsBehind);
-  } else if (depthBonus > 0) {
-    // Facing action: nudge the engine default (DEFAULT_REALIZATION_EDGE = 0.085) up with
-    // depth. At <=100bb leave undefined so the default is used unchanged (bit-identical).
-    realizationEdge = 0.085 + depthBonus;
-  }
+  const realizationEdge =
+    heroSide === 'aggressor' && depth === 0
+      ? openRealizationEdge(seatsBehind) + depthBonus * openDepthPositionFactor(seatsBehind)
+      : undefined;
 
   return {
     config,
