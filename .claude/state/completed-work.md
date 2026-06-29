@@ -22,6 +22,10 @@ Do not delete completed history unless intentionally archiving.
 | DONE-010 | Feature | Rust eval7 + equity (bit-identical, 2.7x faster); wired into worker | 2026-06-28 | |
 | DONE-011 | Docs | README + `.claude/state/` brought current; full-hand-analysis epic spec'd | 2026-06-28 | |
 | DONE-012 | Feature | Rust CFR+ core (bit-identical, 3.7x faster); worker fully Rust/WASM | 2026-06-29 | |
+| DONE-013 | Feature | Solve-quality selector (Fast/Balanced/Max) + hover help + results-panel quality metric | 2026-06-29 | |
+| DONE-014 | Feature | 200bb predefined RFI tier (gen multi-depth; generator routed through Rust/WASM) | 2026-06-29 | |
+| DONE-015 | Feature | Depth-aware realization edge (position-scaled: late widens deep, early ~flat) | 2026-06-29 | DEC-006 |
+| DONE-016 | Feature | Open-jam gated to short stacks (≤20bb) in TS + Rust; fixes deep over-jam artifact | 2026-06-29 | DEC-007 |
 
 ---
 
@@ -88,3 +92,90 @@ Ported the full CFR+ core (bet-tree builder, regret-matching+ traversal, termina
 
 ### Follow-Up Work
 Multi-threaded wasm (SharedArrayBuffer); then the full-hand-analysis epic (M5).
+
+---
+
+## DONE-013: Solve-quality selector
+
+Type: Feature
+Completed Date: 2026-06-29
+Workflow: UX / engine settings
+Related Files: `src/app/store.ts`, `src/ui/SpotConfig.tsx`, `src/ui/BetTreeView.tsx`, `src/app/app.css`
+
+### Summary
+Added a Fast / Balanced / Max quality selector for live (non-cached) solves, mapped to iteration + equity-sample presets, with an ⓘ hover explanation. The results panel shows which preset produced the current result.
+
+### What Changed
+`QUALITY_PRESETS` + `quality`/`resultQuality` state; `solve()` derives `SolveSettings` from the chosen preset (was fixed `DEFAULT_SETTINGS`); cached chart spots load instantly and ignore it. UI: "Solve quality" select + info badge; `Quality` metric in the result header (live results only).
+
+### Validation
+Build clean; 96 tests pass. (No behavior change to cached charts.)
+
+### Follow-Up Work
+None.
+
+---
+
+## DONE-014: 200bb predefined RFI tier
+
+Type: Feature
+Completed Date: 2026-06-29
+Workflow: Library coverage
+Related Files: `scripts/genLibrary.ts`, `src/domain/charts.ts`, `src/domain/generated/rfiLibrary.json`, `src/domain/charts.test.ts`
+Related Decisions: DEC-006
+
+### Summary
+RFI is now solved offline at TWO depth tiers — ~100bb and ~200bb — and served instantly for both (200bb is the owner's cash game; it previously fell back to a slow live solve). The generator was also routed through the Rust/WASM engine (sync instantiate, TS fallback), ~3.7× faster.
+
+### What Changed
+`gen:library` parameterized over `GEN_STACKS="100,200"`, keys `cash|{size}|{pos}|{depth}bb|rfi`; `chartDepthTier()` maps stack → 100bb (~75–150) / 200bb (~150–300) tier. Curated vs-open/vs-3-bet stay 100bb-only, so 200bb response spots live-solve at the correct depth. 26 entries (13×100 + 13×200).
+
+### Validation
+100bb entries reproduce bit-identically (Rust==TS deterministic); 2 new 200bb chart tests; build + tests green.
+
+### Follow-Up Work
+More depth tiers (50bb, 300bb); solved deep response charts once the engine supports them.
+
+---
+
+## DONE-015: Depth-aware realization edge
+
+Type: Feature
+Completed Date: 2026-06-29
+Workflow: Engine modeling
+Related Files: `src/domain/projectSpot.ts`, `src/domain/generated/rfiLibrary.json`
+Related Decisions: DEC-006
+
+### Summary
+The see-flop realization edge now grows with depth (zero at ≤100bb, capped above), position-scaled for opens so deep ranges widen in late position while staying ~flat early — matching real deep-stack play.
+
+### What Changed
+`depthRealizationBonus(stack)` (+0.03 at 200bb, cap +0.05) and `openDepthPositionFactor(behind)` (full on the button → 0.4 floor early). Opens add the position-scaled bonus; deep facing-action (live-solved) nudges the engine default. A first FLAT bonus over-widened every seat and was replaced by position scaling.
+
+### Validation
+100bb tier bit-identical (bonus=0); 200bb entries shifted (e.g. 6-max BTN 52%→62%, 9-max UTG ~flat). Build + tests green. Explicit heuristic, not a depth-resolved solve.
+
+### Follow-Up Work
+Revisit magnitudes if a true deep solver becomes available.
+
+---
+
+## DONE-016: Open-jam gated to short stacks
+
+Type: Feature (modeling fix)
+Completed Date: 2026-06-29
+Workflow: Engine modeling
+Related Files: `src/domain/betTree.ts`, `engine/src/cfr.rs`, `src/wasm/clearsolve_engine.wasm`, `src/domain/generated/rfiLibrary.json`, `src/domain/betTree.test.ts`, `src/engine/preflopSpot.test.ts`, `src/domain/charts.test.ts`
+Related Decisions: DEC-007
+
+### Summary
+Fixed the deep open-jam artifact: the open node offered only min-raise or all-in, so the solver leaked frequency into an open-shove real GTO never makes deep (100bb 9-max UTG showed ~13.5% jam). Open-jamming is now gated to ≤20bb (`OPEN_JAM_MAX_BB`); deep, the open node is Fold / Open.
+
+### What Changed
+Stack-gated the explicit root all-in action in BOTH engines (TS `betTree.ts` + Rust `cfr.rs`); rebuilt + recommitted the wasm; regenerated the library (open-jam now 0.00000 everywhere, total open widths ~unchanged). Updated 3 tests that encoded the old behavior; added 2 (deep = no jam, ≤20bb = jam present).
+
+### Validation
+TS↔Rust CFR parity still 0.00e+0; short-stack jam + push/fold parity preserved; build + 99 tests green.
+
+### Follow-Up Work
+Add a true non-jam LARGE open/3-bet size per node (mix sizings like a production solver).

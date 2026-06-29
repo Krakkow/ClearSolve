@@ -5,9 +5,9 @@
 Project Name: ClearSolve (working name; not final)
 Project Description: Pure client-side (no backend) browser-native NLHE GTO **preflop** solver SPA, personal-use.
 Current Phase: Implementation (active development)
-Current Milestone: Rust→WASM engine port — COMPLETE (equity + CFR+ core, single-threaded). Next: multi-threaded wasm or M5 full-hand analysis.
-Current Workflow: Engine port — incremental TS→Rust with parity validation (done)
-Overall Status: On track — working app, fully Rust/WASM engine, 96 tests passing, build clean
+Current Milestone: Engine port COMPLETE + post-port realism pass DONE (quality selector, 200bb tier, depth-aware edge, open-jam fix). Next: multi-threaded wasm or M5 full-hand analysis.
+Current Workflow: Realism/coverage improvements (200bb + depth edge + open-sizing) — done
+Overall Status: On track — working app, fully Rust/WASM engine, 99 tests passing, build clean
 Last Updated: 2026-06-29
 
 ---
@@ -62,9 +62,12 @@ Rust toolchain (rustup 1.96 + wasm32 target + wasm-pack 0.13) for the `engine/` 
 | FEAT-021 | Full action-frequency taxonomy | Built | |
 | — | Scenario builder + default ranges + inline range editor | Built | |
 | — | Position-calibrated multiway opens | Built | realization-edge model |
-| FEAT-019 | Predefined chart cache + live fallback | Partial | RFI solved-offline; vs-open/vs-3bet curated |
-| — | Offline generation pipeline (`gen:library`) | Built | RFI only |
+| FEAT-019 | Predefined chart cache + live fallback | Partial | RFI solved-offline at ~100bb AND ~200bb; vs-open/vs-3bet curated (100bb) |
+| — | Offline generation pipeline (`gen:library`) | Built | RFI, multi-depth (100/200bb), runs on Rust/WASM |
 | — | Rust→WASM: evaluator + equity + CFR+ | Built | full solve wired into worker (TS fallback) |
+| — | Solve-quality selector (Fast/Balanced/Max) | Built | per-spot precision; cached charts ignore it |
+| — | Depth-aware realization edge (position-scaled) | Built | deep widens late, ~flat early; heuristic (DEC-006) |
+| — | Realistic open-sizing (open-jam gated ≤20bb) | Built | both engines; fixes deep over-jam (DEC-007) |
 | FEAT-026 | Tournament / ICM | Not built | UI stub "coming soon" |
 | FEAT-008 | Constrained HU postflop solving | Not built | part of full-hand-analysis epic |
 | — | Full-hand analysis (hand-history import + replay + postflop) | Planned | new epic, see PRD |
